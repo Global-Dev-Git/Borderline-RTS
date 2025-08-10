@@ -51,6 +51,8 @@
       #startOverlay.hidden { display: none; }
       #startOverlay .card { background: rgba(0,0,0,0.8); border: 1px solid rgba(255,255,255,0.15); padding: 22px 28px; border-radius: 12px; text-align: center; }
       #countdown { font-size: 42px; margin-top: 8px; letter-spacing: 1px; }
+      .diffRow { margin:8px 0; }
+      .ml10 { margin-left:10px; }
     </style>
   </head>
   <body>
@@ -64,7 +66,49 @@
     <div id="startOverlay">
       <div class="card">
         <h1>Borderline RTS</h1>
-        <p>Select your troops and give orders. The border shifts with presence.</p>
+        <p>Select difficulty and AI behavior.</p>
+        <div class="diffRow">
+          <label><input type="radio" name="diff" value="veryeasy"> Very Easy</label>
+          <label class="ml10"><input type="radio" name="diff" value="slightlyeasy"> Slightly Easy</label>
+          <label class="ml10"><input type="radio" name="diff" value="easy"> Easy</label>
+          <label class="ml10"><input type="radio" name="diff" value="normal" checked> Normal</label>
+          <label class="ml10"><input type="radio" name="diff" value="slightlyhard"> Slightly Hard</label>
+          <label class="ml10"><input type="radio" name="diff" value="hard"> Hard</label>
+          <label class="ml10"><input type="radio" name="diff" value="veryhard"> Very Hard</label>
+        </div>
+        <div class="diffRow">
+          <label><input type="radio" name="agg" value="veryaggressive"> Very Aggressive</label>
+          <label class="ml10"><input type="radio" name="agg" value="aggressive"> Aggressive</label>
+          <label class="ml10"><input type="radio" name="agg" value="slightlyaggressive"> Slightly Aggressive</label>
+          <label class="ml10"><input type="radio" name="agg" value="balanced" checked> Balanced/Normal</label>
+          <label class="ml10"><input type="radio" name="agg" value="slightlydefensive"> Slightly Defensive</label>
+          <label class="ml10"><input type="radio" name="agg" value="defensive"> Defensive</label>
+          <label class="ml10"><input type="radio" name="agg" value="verydefensive"> Very Defensive</label>
+        </div>
+        <div class="diffRow">
+          <label><input type="checkbox" id="spectateChk"> Spectate (AI vs AI)</label>
+        </div>
+        <div id="spectateOptions" class="diffRow" style="display:none; text-align:left;">
+          <div style="margin-bottom:6px;">Blue AI:</div>
+          <div class="ml10">
+            <label><input type="radio" name="diffBlue" value="veryeasy"> Very Easy</label>
+            <label class="ml10"><input type="radio" name="diffBlue" value="slightlyeasy"> Slightly Easy</label>
+            <label class="ml10"><input type="radio" name="diffBlue" value="easy"> Easy</label>
+            <label class="ml10"><input type="radio" name="diffBlue" value="normal" checked> Normal</label>
+            <label class="ml10"><input type="radio" name="diffBlue" value="slightlyhard"> Slightly Hard</label>
+            <label class="ml10"><input type="radio" name="diffBlue" value="hard"> Hard</label>
+            <label class="ml10"><input type="radio" name="diffBlue" value="veryhard"> Very Hard</label>
+          </div>
+          <div class="ml10" style="margin-top:6px;">
+            <label><input type="radio" name="aggBlue" value="veryaggressive"> Very Aggressive</label>
+            <label class="ml10"><input type="radio" name="aggBlue" value="aggressive"> Aggressive</label>
+            <label class="ml10"><input type="radio" name="aggBlue" value="slightlyaggressive"> Slightly Aggressive</label>
+            <label class="ml10"><input type="radio" name="aggBlue" value="balanced" checked> Balanced/Normal</label>
+            <label class="ml10"><input type="radio" name="aggBlue" value="slightlydefensive"> Slightly Defensive</label>
+            <label class="ml10"><input type="radio" name="aggBlue" value="defensive"> Defensive</label>
+            <label class="ml10"><input type="radio" name="aggBlue" value="verydefensive"> Very Defensive</label>
+          </div>
+        </div>
         <button id="startBtn">Start</button>
         <div id="countdown"></div>
       </div>
@@ -105,9 +149,27 @@
           battleship: { radius: 8, baseSpeed: 36, hp: 260, dps: 30 },
           transporter: { radius: 8, baseSpeed: 40, hp: 180, dps: 8, cargo: 5 },
         },
+        difficultyPresets: {
+          veryeasy:    { spawnIntervalMult: 2.4, aiDamageMult: 0.55, aiSpeedMult: 0.85, aiHpMult: 0.75, aiPlanFactor: 1.35 },
+          slightlyeasy:{ spawnIntervalMult: 1.8, aiDamageMult: 0.75, aiSpeedMult: 0.93, aiHpMult: 0.9,  aiPlanFactor: 1.2 },
+          easy:        { spawnIntervalMult: 1.5, aiDamageMult: 0.85, aiSpeedMult: 0.95, aiHpMult: 0.95, aiPlanFactor: 1.1 },
+          normal:      { spawnIntervalMult: 1.0, aiDamageMult: 1.0,  aiSpeedMult: 1.0,  aiHpMult: 1.0,  aiPlanFactor: 1.0 },
+          slightlyhard:{ spawnIntervalMult: 0.85,aiDamageMult: 1.15, aiSpeedMult: 1.05, aiHpMult: 1.08, aiPlanFactor: 0.92 },
+          hard:        { spawnIntervalMult: 0.7, aiDamageMult: 1.3,  aiSpeedMult: 1.12, aiHpMult: 1.18, aiPlanFactor: 0.85 },
+          veryhard:    { spawnIntervalMult: 0.5, aiDamageMult: 1.5,  aiSpeedMult: 1.2,  aiHpMult: 1.3,  aiPlanFactor: 0.75 }
+        },
+        aggressionPresets: {
+          veryaggressive:   { defendWeight: 0.4, capFocus: 1.4, groupSizeMult: 1.2 },
+          aggressive:       { defendWeight: 0.6, capFocus: 1.25, groupSizeMult: 1.1 },
+          slightlyaggressive:{ defendWeight:0.8, capFocus: 1.1,  groupSizeMult: 1.05 },
+          balanced:        { defendWeight: 1.0, capFocus: 1.0,  groupSizeMult: 1.0 },
+          slightlydefensive:{ defendWeight:1.2, capFocus: 0.95, groupSizeMult: 0.95 },
+          defensive:       { defendWeight: 1.4, capFocus: 0.9,  groupSizeMult: 0.9 },
+          verydefensive:   { defendWeight: 1.7, capFocus: 0.85, groupSizeMult: 0.85 }
+        },
         borders: { color: '#0e0e1a', width: 3.5 },
         // Slower than last edit but still faster than original (30s/25s)
-        spawn: { citySeconds: 20, capitalSeconds: 14 },
+        spawn: { citySeconds: 28, capitalSeconds: 20 },
         ai: { planEverySeconds: 5, groupRadius: 80, defenseRadius: 160, garrisonSize: 3, attackGroupSize: 10 },
         frontline: { rowStep: 4, jitter: 6, unitsPerSidePerRow: 1 },
         controls: { retreatGrace: 2.0 },
@@ -121,7 +183,7 @@
         cityDamageMinMultiplier: 0.6,
         cityDamageFalloffPx: 1200,
         friendlyCrowdSlowPerUnit: 0.35,
-        friendlyCrowdRadius: 14,
+          friendlyCrowdRadius: 14,
         formation: { advanceSpeed: 24, retargetPx: 22 }
       };
 
@@ -136,6 +198,11 @@
       const startOverlay = document.getElementById('startOverlay');
       const startBtn = document.getElementById('startBtn');
       const countdownEl = document.getElementById('countdown');
+      function getSelectedDifficulty(){ const radios=document.querySelectorAll('input[name="diff"]'); for(const r of radios){ if(r.checked) return r.value; } return 'normal'; }
+      function getSelectedAggression(){ const radios=document.querySelectorAll('input[name="agg"]'); for(const r of radios){ if(r.checked) return r.value; } return 'balanced'; }
+      function getSpectate(){ const el=document.getElementById('spectateChk'); return !!(el && el.checked); }
+      function getSelectedDifficultyBlue(){ const radios=document.querySelectorAll('input[name="diffBlue"]'); for(const r of radios){ if(r.checked) return r.value; } return 'normal'; }
+      function getSelectedAggressionBlue(){ const radios=document.querySelectorAll('input[name="aggBlue"]'); for(const r of radios){ if(r.checked) return r.value; } return 'balanced'; }
 
       function resizeCanvasToWindow() {
         canvas.width = Math.floor(window.innerWidth);
@@ -291,7 +358,31 @@
           }
         }
         smooth(); smooth();
-        const mid=Math.floor(cols/2); for(let r=0;r<rows;r++){for(let c of [mid-1, mid]){const t=grid[r*cols+c]; t.owner = c<mid? 'blue':'red'; t.control=(c<mid?1:-1)*CONFIG.tileControlThreshold;}}
+        // Initial frontline: single smooth line at random angle with gentle curvature
+        const mid = { x: cols/2, y: rows/2 };
+        const theta = rng.range(0, Math.PI*2);
+        const nx = Math.cos(theta), ny = Math.sin(theta); // normal
+        const tx = -ny, ty = nx; // tangent
+        const period = rng.range(Math.max(cols,rows)*0.8, Math.max(cols,rows)*1.6);
+        const k = (Math.PI*2)/period;
+        const amp = rng.range(Math.max(cols,rows)*0.04, Math.max(cols,rows)*0.12);
+        const phi = rng.range(0, Math.PI*2);
+        function signed(pcx, pry){
+          const dx = pcx - mid.x, dy = pry - mid.y;
+          const t = dx*tx + dy*ty;
+          const curve = amp * Math.sin(k * t + phi);
+          const s = dx*nx + dy*ny - curve;
+          return s;
+        }
+        for(let r=0;r<rows;r++){
+          for(let c=0;c<cols;c++){
+            const s = signed(c+0.5, r+0.5);
+            const t=grid[r*cols+c];
+            if(s<0){ t.owner='blue'; t.control=CONFIG.tileControlThreshold; }
+            else { t.owner='red'; t.control=-CONFIG.tileControlThreshold; }
+          }
+        }
+        grid.frontline = { theta, amp, k, phi, center: mid };
 
         // Adjust final share to ensure main terrain is within 40%-70%
         const mainCount = grid.filter(t=>t.terrain===mainTerrain).length;
@@ -351,7 +442,7 @@
       }
 
       class Unit{
-        constructor(x,y,side,isTank=false){ this.x=x; this.y=y; this.side=side; this.isTank=isTank; const a=isTank?CONFIG.tankUnit:CONFIG.baseUnit; this.radius=a.radius; this.baseSpeed=a.baseSpeed; this.maxHp=a.hp; this.hp=this.maxHp; this.dps=a.dps; this.selected=false; this.path=null; this.pathIndex=0; this.target=null; this.engaged=false; this.lockedForCombat=false; this.retreatUntil=0; this.isRetreating=false; this.lastPos={x,y}; this.type='land'; }
+        constructor(x,y,side,isTank=false){ this.x=x; this.y=y; this.side=side; this.isTank=isTank; const a=isTank?CONFIG.tankUnit:CONFIG.baseUnit; this.radius=a.radius; this.baseSpeed=a.baseSpeed; this.baseSpeedOriginal=this.baseSpeed; this.baseSpeedBaseline=this.baseSpeed; this.maxHp=a.hp; this.maxHpOriginal=this.maxHp; this.hp=this.maxHp; this.dps=a.dps; this.selected=false; this.path=null; this.pathIndex=0; this.target=null; this.engaged=false; this.lockedForCombat=false; this.retreatUntil=0; this.isRetreating=false; this.lastPos={x,y}; this.type='land'; }
         setTarget(x,y,map){ this.target={x,y}; const s=worldToCell(this.x,this.y); const e=worldToCell(x,y); const path=findPath(map,s.c,s.r,e.c,e.r,false); this.path=path; this.pathIndex=0; this.retreatUntil = nowSec() + CONFIG.controls.retreatGrace; }
         update(dt,map){
           // Movement is skipped if locked in combat
@@ -495,26 +586,46 @@
 
       // Game state
       let state=null;
-      function createGame(seed){ const rng=new RNG(seed); const map=generateMap(rng); const cities=[]; function placeCity(side,isCapital){ for(let tries=0; tries<4000; tries++){ const c = side==='blue'? rng.int(3, Math.floor(map.cols/2)-5) : rng.int(Math.ceil(map.cols/2)+4, map.cols-4); const r=rng.int(4,map.rows-5); const t=tileAt(map,c,r); if(!t) continue; if(['ocean','lake','water','river','mountain'].includes(t.terrain)) continue; const {x,y}=cellCenter(c,r); if(cities.some(ci=>dist(ci.x,ci.y,x,y)<90)) continue; cities.push(new City(x,y,side,isCapital)); return; } }
+      function createGame(seed){ const rng=new RNG(seed); const map=generateMap(rng); const cities=[]; function placeCity(side,isCapital){ for(let tries=0; tries<6000; tries++){ const c = rng.int(2, map.cols-3); const r=rng.int(3,map.rows-4); const t=tileAt(map,c,r); if(!t) continue; // must be owned by side at start
+            if(t.owner!==side) continue; if(['ocean','lake','water','river','mountain'].includes(t.terrain)) continue; const {x,y}=cellCenter(c,r); if(cities.some(ci=>dist(ci.x,ci.y,x,y)<100)) continue; cities.push(new City(x,y,side,isCapital)); return; } }
         for(const side of ['blue','red']){ placeCity(side,true); for(let i=0;i<4;i++) placeCity(side,false); }
         // Place harbors
-        function isCoast(c,r){ const t=tileAt(map,c,r); if(!t) return false; if(['ocean','lake','water','river'].includes(t.terrain)) return false; const dirs=[[1,0],[-1,0],[0,1],[0,-1]]; for(const [dc,dr] of dirs){ const tt=tileAt(map,c+dc,r+dr); if(tt && ['ocean','lake','water','river'].includes(tt.terrain)) return true; } return false; }
-        function placeHarbors(side){ let placed=0; let attempts=0; while(placed<3 && attempts<10000){ attempts++; const c = side==='blue'? rng.int(2, Math.floor(map.cols/2)-6) : rng.int(Math.ceil(map.cols/2)+5, map.cols-3); const r=rng.int(3,map.rows-4); if(!isCoast(c,r)) continue; const {x,y}=cellCenter(c,r); if(cities.some(ci=>dist(ci.x,ci.y,x,y)<120)) continue; const harbor=new City(x,y,side,false); harbor.isHarbor=true; cities.push(harbor); placed++; } }
+        function isCoastForSide(c,r,side){ const t=tileAt(map,c,r); if(!t) return false; if(t.owner!==side) return false; if(['ocean','lake','water','river'].includes(t.terrain)) return false; const dirs=[[1,0],[-1,0],[0,1],[0,-1]]; for(const [dc,dr] of dirs){ const tt=tileAt(map,c+dc,r+dr); if(tt && ['ocean','lake','water','river'].includes(tt.terrain)) return true; } return false; }
+        function placeHarbors(side){ let placed=0; let attempts=0; while(placed<3 && attempts<12000){ attempts++; const c = rng.int(2, map.cols-3); const r=rng.int(3,map.rows-4); if(!isCoastForSide(c,r,side)) continue; const {x,y}=cellCenter(c,r); if(cities.some(ci=>dist(ci.x,ci.y,x,y)<130)) continue; const harbor=new City(x,y,side,false); harbor.isHarbor=true; cities.push(harbor); placed++; } }
         for(const side of ['blue','red']) placeHarbors(side);
-        const units=[]; const lastPlanAt={red:0}; const st={ rng, map, cities, units, lastPlanAt, startedAt: nowSec(), paused:false, winner:null, allowCombat:false, countdownActive:true };
+        const units=[]; const lastPlanAt={red:0, blue:0}; const st={ rng, map, cities, units, lastPlanAt, startedAt: nowSec(), paused:false, winner:null, allowCombat:false, countdownActive:true, difficulty: 'normal' };
         // Initial frontline troops on both sides
         spawnFrontlineUnits(st);
         return st; }
 
       function terrainPassable(t){ return CONFIG.terrain[t.terrain].move !== Infinity; }
-      function spawnFrontlineUnits(st){ const {map}=st; const mid=Math.floor(map.cols/2); const step=CONFIG.frontline.rowStep; const offsetCells = Math.max(3, Math.ceil((CONFIG.engageRadius+12)/TILE_W)); for(let r=2; r<map.rows-2; r+=step){
-          // find blue-side passable tile away from border
-          let bc=null; for(let c=mid-1-offsetCells; c>=Math.max(1,mid-16); c--){ const t=tileAt(map,c,r); if(t && terrainPassable(t)) { bc=c; break; } }
-          // find red-side passable tile away from border
-          let rc=null; for(let c=mid+offsetCells; c<Math.min(map.cols-2, mid+16); c++){ const t=tileAt(map,c,r); if(t && terrainPassable(t)) { rc=c; break; } }
-          const count = CONFIG.frontline.unitsPerSidePerRow;
-          if(bc!=null){ const base=cellCenter(bc,r); for(let i=0;i<count;i++){ const j=(Math.random()-0.5)*CONFIG.frontline.jitter; const off=(i-(count-1)/2)*12; const u=new Unit(base.x-6+off, base.y+j, 'blue', Math.random()<0.18); st.units.push(u);} }
-          if(rc!=null){ const base=cellCenter(rc,r); for(let i=0;i<count;i++){ const j=(Math.random()-0.5)*CONFIG.frontline.jitter; const off=(i-(count-1)/2)*12; const u=new Unit(base.x+6+off, base.y+j, 'red', Math.random()<0.18); st.units.push(u);} }
+      function spawnFrontlineUnits(st){
+        const {map}=st; const cols=map.cols, rows=map.rows; const fl = map.tiles.frontline || map.frontline || {};
+        const theta = fl.theta ?? Math.random()*Math.PI*2; const nx=Math.cos(theta), ny=Math.sin(theta); const tx=-ny, ty=nx;
+        const center = fl.center || { x: cols/2, y: rows/2 };
+        const k = fl.k ?? (2*Math.PI/Math.max(cols,rows)); const amp = fl.amp ?? (Math.max(cols,rows)*0.08);
+        const phi = fl.phi ?? Math.random()*Math.PI*2;
+        function curvePoint(t){ // in cell space
+          const cx = center.x + t*tx + amp*Math.sin(k*t + phi)*nx;
+          const cy = center.y + t*ty + amp*Math.sin(k*t + phi)*ny;
+          return { x: cx, y: cy };
+        }
+        function isBlue(c,r){ const dx=(c+0.5)-center.x, dy=(r+0.5)-center.y; const tt=dx*tx+dy*ty; const s=dx*nx+dy*ny - amp*Math.sin(k*tt+phi); return s<0; }
+        function findNearestPassableCell(cx, cy, side){ const maxRad=6; for(let rad=0; rad<=maxRad; rad++){ for(let dr=-rad; dr<=rad; dr++){ for(let dc=-rad; dc<=rad; dc++){ if(Math.abs(dc)!==rad && Math.abs(dr)!==rad) continue; const c=clamp(Math.round(cx)+dc,1,cols-2), r=clamp(Math.round(cy)+dr,1,rows-2); const t=tileAt(map,c,r); if(!t) continue; if((side==='blue' && isBlue(c,r)) || (side==='red' && !isBlue(c,r))){ if(terrainPassable(t)) return {c,r}; } } } } return null; }
+        const offsetCells = Math.max(3, Math.ceil((CONFIG.engageRadius+12)/TILE_W));
+        const stepCells = Math.max(2, CONFIG.frontline.rowStep);
+        const maxLen = Math.hypot(cols, rows);
+        const targets=[];
+        for(let t=-maxLen; t<=maxLen; t+=stepCells){ const p=curvePoint(t); if(p.x>1 && p.x<cols-1 && p.y>1 && p.y<rows-1) targets.push(p); }
+        const count = CONFIG.frontline.unitsPerSidePerRow;
+        for(const p of targets){
+          // Blue target offset along -normal
+          const bcx = p.x - nx*offsetCells, bcy = p.y - ny*offsetCells;
+          const rcx = p.x + nx*offsetCells, rcy = p.y + ny*offsetCells;
+          const bCell=findNearestPassableCell(bcx,bcy,'blue');
+          const rCell=findNearestPassableCell(rcx,rcy,'red');
+          if(bCell){ const base=cellCenter(bCell.c,bCell.r); for(let i=0;i<count;i++){ const j=(Math.random()-0.5)*CONFIG.frontline.jitter; const u=new Unit(base.x, base.y+j, 'blue', Math.random()<0.18); st.units.push(u);} }
+          if(rCell){ const base=cellCenter(rCell.c,rCell.r); for(let i=0;i<count;i++){ const j=(Math.random()-0.5)*CONFIG.frontline.jitter; const u=new Unit(base.x, base.y+j, 'red', Math.random()<0.18); st.units.push(u);} }
         }
       }
 
@@ -529,7 +640,7 @@
       }
 
       class NavalUnit extends Unit{
-        constructor(x,y,side,type){ super(x,y,side,false); const a=CONFIG.navalUnits[type]; this.radius=a.radius; this.baseSpeed=a.baseSpeed; this.maxHp=a.hp; this.hp=this.maxHp; this.dps=a.dps; this.type=type; this.isNaval=true; this.cargo = type==='transporter' ? (CONFIG.navalUnits.transporter.cargo||5) : 0; }
+        constructor(x,y,side,type){ super(x,y,side,false); const a=CONFIG.navalUnits[type]; this.radius=a.radius; this.baseSpeed=a.baseSpeed; this.baseSpeedOriginal=this.baseSpeed; this.maxHp=a.hp; this.maxHpOriginal=this.maxHp; this.hp=this.maxHp; this.dps=a.dps; this.type=type; this.isNaval=true; this.cargo = type==='transporter' ? (CONFIG.navalUnits.transporter.cargo||5) : 0; }
         setTarget(x,y,map){ this.target={x,y}; const s=worldToCell(this.x,this.y); const e=worldToCell(x,y); const path=findPath(map,s.c,s.r,e.c,e.r,true); this.path=path; this.pathIndex=0; }
         update(dt,map){
           // Movement on naval tiles only
@@ -587,12 +698,13 @@
       // Input
       let mouse={x:0,y:0}; let drag=null; canvas.addEventListener('mousemove',e=>{ const rect=canvas.getBoundingClientRect(); mouse.x=e.clientX-rect.left; mouse.y=e.clientY-rect.top; if(drag){ drag.x1=mouse.x; drag.y1=mouse.y; } });
       canvas.addEventListener('mousedown',e=>{ if(state.winner) return; if(e.button===0){ drag={x0:mouse.x,y0:mouse.y,x1:mouse.x,y1:mouse.y}; }});
-      canvas.addEventListener('mouseup',e=>{ if(state.winner) return; if(e.button===0){ const box=drag; drag=null; if(!box) return; const moved=Math.hypot(box.x1-box.x0,box.y1-box.y0)>4; if(moved){ const minX=Math.min(box.x0,box.x1), maxX=Math.max(box.x0,box.x1); const minY=Math.min(box.y0,box.y1), maxY=Math.max(box.y0,box.y1); for(const u of state.units) u.selected=false; for(const u of state.units){ if(u.side!=='blue') continue; if(u.x>=minX && u.x<=maxX && u.y>=minY && u.y<=maxY) u.selected=true; } } else { let picked=null, best=12; for(const u of state.units){ if(u.side!=='blue') continue; const d=Math.hypot(u.x-mouse.x,u.y-mouse.y); if(d<best){ best=d; picked=u; } } if(picked){ for(const u of state.units) u.selected=false; picked.selected=true; } } }});
+      canvas.addEventListener('mouseup',e=>{ if(state.winner) return; if(state.spectate) return; if(e.button===0){ const box=drag; drag=null; if(!box) return; const moved=Math.hypot(box.x1-box.x0,box.y1-box.y0)>4; if(moved){ const minX=Math.min(box.x0,box.x1), maxX=Math.max(box.x0,box.x1); const minY=Math.min(box.y0,box.y1), maxY=Math.max(box.y0,box.y1); for(const u of state.units) u.selected=false; for(const u of state.units){ if(u.side!=='blue') continue; if(u.x>=minX && u.x<=maxX && u.y>=minY && u.y<=maxY) u.selected=true; } } else { let picked=null, best=12; for(const u of state.units){ if(u.side!=='blue') continue; const d=Math.hypot(u.x-mouse.x,u.y-mouse.y); if(d<best){ best=d; picked=u; } } if(picked){ for(const u of state.units) u.selected=false; picked.selected=true; } } }});
       // Right-click drag formation line (offensive line) instead of path following
       let rdrag=null; // {points:[{x,y}], active:boolean}
       let suppressContextMenuOnce=false;
       canvas.addEventListener('contextmenu',e=>{
         e.preventDefault(); if(state.winner) return false;
+        if(state.spectate) return false; // disable player orders in spectate
         if(suppressContextMenuOnce){ suppressContextMenuOnce=false; return false; }
         const selected=state.units.filter(u=>u.selected && u.side==='blue');
         // If not dragging a line (or line too short), treat as single-click ring formation
@@ -606,10 +718,10 @@
         }
         return false;
       });
-      canvas.addEventListener('mousedown', e=>{ if(e.button===2){ rdrag={points:[{x:mouse.x,y:mouse.y}], active:true}; } });
+      canvas.addEventListener('mousedown', e=>{ if(state.spectate) return; if(e.button===2){ rdrag={points:[{x:mouse.x,y:mouse.y}], active:true}; } });
       canvas.addEventListener('mousemove', e=>{ if(rdrag && rdrag.active){ const last=rdrag.points[rdrag.points.length-1]; const dx=mouse.x-last.x, dy=mouse.y-last.y; if(Math.hypot(dx,dy)>10){ rdrag.points.push({x:mouse.x,y:mouse.y}); } } });
       window.addEventListener('mouseup', e=>{
-        if(rdrag && e.button===2){
+        if(rdrag && e.button===2){ if(state.spectate){ rdrag=null; return; }
           const selected=state.units.filter(u=>u.selected && u.side==='blue');
           if(selected.length && rdrag.points.length>1){
             const pts=rdrag.points.slice();
@@ -648,9 +760,16 @@
         startOverlay.classList.remove('hidden'); countdownEl.textContent=''; }
 
       // Start flow with countdown and combat lock
+      // Spectate options show/hide
+      (function(){ const chk=document.getElementById('spectateChk'); const opt=document.getElementById('spectateOptions'); if(chk&&opt){ chk.addEventListener('change',()=>{ opt.style.display = chk.checked? 'block':'none'; }); } })();
+
       startBtn.addEventListener('click', ()=>{
         if(!state) return; let remaining=5; countdownEl.textContent=String(remaining);
+        state.difficulty = getSelectedDifficulty();
+        state.aggression = getSelectedAggression();
         state.countdownActive=true; state.allowCombat=false; startBtn.disabled=true;
+        state.spectate = getSpectate();
+        if(state.spectate){ state.difficultyBlue = getSelectedDifficultyBlue(); state.aggressionBlue = getSelectedAggressionBlue(); } else { state.difficultyBlue = state.difficulty; state.aggressionBlue = state.aggression; }
         const id=setInterval(()=>{
           remaining--; if(remaining>0){ countdownEl.textContent=String(remaining); }
           else { clearInterval(id); countdownEl.textContent='Go!'; setTimeout(()=>{ startOverlay.classList.add('hidden'); state.countdownActive=false; state.allowCombat=true; countdownEl.textContent=''; startBtn.disabled=false; }, 400); }
@@ -660,38 +779,65 @@
       // AI
       function aiUpdate(){
         if(!state.allowCombat) return;
-        const t=nowSec(); if(t-state.lastPlanAt.red<CONFIG.ai.planEverySeconds) return; state.lastPlanAt.red=t;
-        const redUnits=state.units.filter(u=>u.side==='red'); if(!redUnits.length) return;
-        const redCities=state.cities.filter(c=>c.side==='red');
-        const blueCities=state.cities.filter(c=>c.side==='blue'); if(!blueCities.length) return;
+        aiUpdateSide('red', state.difficulty, state.aggression);
+        if(state.spectate) aiUpdateSide('blue', state.difficultyBlue || state.difficulty, state.aggressionBlue || state.aggression);
+      }
 
-        // Assess threats near red cities
-        const threatened = redCities.filter(c=>{
-          const enemiesNear = getUnitsInRadius(c.x, c.y, CONFIG.ai.defenseRadius).some(u=>u.side==='blue');
-          return enemiesNear;
-        });
+      function aiUpdateSide(side, difficulty, aggression){
+        const t=nowSec(); if(t - (state.lastPlanAt[side]||0) < CONFIG.ai.planEverySeconds) return; state.lastPlanAt[side]=t;
+        const sideUnits=state.units.filter(u=>u.side===side); if(!sideUnits.length) return;
+        const diff = CONFIG.difficultyPresets[difficulty||'normal'] || CONFIG.difficultyPresets.normal;
+        const agg = CONFIG.aggressionPresets[aggression||'balanced'] || CONFIG.aggressionPresets.balanced;
+        const ownCities=state.cities.filter(c=>c.side===side);
+        const enemySide = (side==='red') ? 'blue' : 'red';
+        const enemyCities=state.cities.filter(c=>c.side===enemySide); if(!enemyCities.length) return;
 
-        // Create a pool of idle/available units
-        const idle = redUnits.filter(u=>!u.path || u.pathIndex>=u.path.length || Math.random()<0.15);
+        // Assess threats near own cities
+        const threatened = ownCities.filter(c=> getUnitsInRadius(c.x, c.y, CONFIG.ai.defenseRadius*agg.defendWeight).some(u=>u.side===enemySide));
+
+        // Pool of idle units
+        const idle = sideUnits.filter(u=>!u.path || u.pathIndex>=u.path.length || Math.random()<0.15);
+        // Apply AI speed/HP multipliers (idempotent)
+        for(const u of sideUnits){
+          if(u._diffApplied!==state.difficulty && (side==='red' || state.spectate)){
+            u.baseSpeed = (u.baseSpeedOriginal||u.baseSpeed) * diff.aiSpeedMult;
+            u.maxHp = (u.maxHpOriginal||u.maxHp) * diff.aiHpMult;
+            if(u.hp>u.maxHp) u.hp=u.maxHp; u._diffApplied=state.difficulty;
+          }
+        }
 
         if(threatened.length){
-          // Assign defenders to threatened cities
           for(const city of threatened){
-            const needed = CONFIG.ai.garrisonSize;
+            const needed = Math.max(1, Math.round(CONFIG.ai.garrisonSize * (diff.aiPlanFactor)));
             const defenders = idle.splice(0, needed);
             for(const u of defenders){ const jitter=()=> (Math.random()-0.5)*40; u.setTarget(city.x+jitter(), city.y+jitter(), state.map); }
           }
         }
 
-        // Remaining units form attack groups aimed at nearest blue cities (prefer capital if exists)
-        const capitals = blueCities.filter(c=>c.isCapital);
-        const attackTarget = capitals[0] || blueCities[Math.floor(Math.random()*blueCities.length)];
-        const groupSize = CONFIG.ai.attackGroupSize;
+        // Determine attack target and stick to frontlines: push toward nearest enemy-controlled border cells
+        const ownCapital = ownCities.find(c=>c.isCapital);
+        const ownCapUnderAttack = ownCapital && getUnitsInRadius(ownCapital.x, ownCapital.y, CONFIG.ai.defenseRadius*1.2).some(u=>u.side===enemySide);
+        let attackTarget;
+        if(ownCapUnderAttack){ attackTarget = ownCapital; }
+        else {
+          const enemyCaps = enemyCities.filter(c=>c.isCapital);
+          if(enemyCaps.length && Math.random()<Math.min(1, agg.capFocus*0.6)) attackTarget = enemyCaps[0];
+          else {
+            // frontline-seeking: choose nearest enemy border segment to unit centroid
+            const cx = sideUnits.reduce((a,u)=>a+u.x,0)/sideUnits.length, cy=sideUnits.reduce((a,u)=>a+u.y,0)/sideUnits.length;
+            // sample a grid of potential frontline points (owner boundaries)
+            let bestPt={x:cx,y:cy}, bestD=Infinity;
+            for(let r=2;r<state.map.rows-2;r+=6){ for(let c=2;c<state.map.cols-2;c+=6){ const a=tileAt(state.map,c,r), b=tileAt(state.map,c+1,r); const d=tileAt(state.map,c,r+1); if(a&&b&&a.owner!==b.owner){ const p={x:(c+1)*TILE_W,y:r*TILE_H}; const dd=dist(p.x,p.y,cx,cy); if(dd<bestD) { bestD=dd; bestPt=p; } } if(a&&d&&a.owner!==d.owner){ const p={x:c*TILE_W,y:(r+1)*TILE_H}; const dd=dist(p.x,p.y,cx,cy); if(dd<bestD) { bestD=dd; bestPt=p; } } } }
+            attackTarget = { x: bestPt.x, y: bestPt.y };
+          }
+        }
+        const groupSize = Math.max(3, Math.round(CONFIG.ai.attackGroupSize * agg.groupSizeMult * (1/diff.aiPlanFactor)));
         for(let i=0; i<idle.length; i+=groupSize){
           const group = idle.slice(i, i+groupSize);
           if(group.length===0) break;
-          const spread = 70;
-          for(const u of group){ const jitter=()=> (Math.random()-0.5)*spread; u.setTarget(attackTarget.x+jitter(), attackTarget.y+jitter(), state.map); }
+          const spread = 120;
+          const offset = (idx)=>{ const ang = (idx/group.length)*Math.PI*2; return { dx: Math.cos(ang)*spread, dy: Math.sin(ang)*spread }; };
+          for(let gi=0; gi<group.length; gi++){ const u=group[gi]; const o=offset(gi); const tx=attackTarget.x+o.dx, ty=attackTarget.y+o.dy; u.setTarget(tx, ty, state.map); }
         }
       }
 
@@ -703,7 +849,7 @@
         const engageRadius=CONFIG.engageRadius; // where damage starts
         for(const u of state.units){
           // Nearby search once per unit
-          const neighbors=getUnitsInRadius(u.x,u.y,engageRadius+8);
+          const neighbors=getUnitsInRadius(u.x,u.y,engageRadius+10);
           const enemies=neighbors.filter(n=>n.side!==u.side);
           // During countdown, collisions only (no combat lock)
           if(state.allowCombat){
@@ -721,6 +867,7 @@
             const flankDirs = [left>0,right>0,up>0,down>0].filter(Boolean).length; // 1..4
             const flankMultiplier = 1 + (flankDirs-1)*0.35; // +35% per extra side
             const outnumberedMultiplier = enemyCount / friendlyCount;
+            const diff = CONFIG.difficultyPresets[state.difficulty||'normal'] || CONFIG.difficultyPresets.normal;
             const typeMod = (u.isTank?0.8:1);
             // Terrain damage taken modifier
             const cell=worldToCell(u.x,u.y); const tt=tileAt(state.map,cell.c,cell.r); const terrMod = tt ? (CONFIG.terrain[tt.terrain].damageTakenMultiplier || 1) : 1;
@@ -731,18 +878,32 @@
               return clamp(min + (1-min)*k, min, 1);
             }
             const cityMult = nearestFriendlyCityMultiplier(u);
-            const totalDps=enemies.reduce((s,e)=>s+e.dps,0) * typeMod * outnumberedMultiplier * flankMultiplier * terrMod * cityMult;
+            const aiMult = (u.side==='red') ? diff.aiDamageMult : 1;
+            const totalDps=enemies.reduce((s,e)=>s+e.dps,0) * typeMod * outnumberedMultiplier * flankMultiplier * terrMod * cityMult * aiMult;
             u.hp -= totalDps*dt*0.15;
           }
           // Physical collision with minimum navigable gap rule; softer friendly collision
-          for(const v of neighbors){ if(v===u) continue; const dx=u.x-v.x, dy=u.y-v.y; const d=Math.hypot(dx,dy); const minGap=(u.radius+v.radius)*CONFIG.minGapFactor; const minDist=u.radius+v.radius; if(d>0 && d<minDist){ const overlap=minDist-d; const nx=dx/d, ny=dy/d; const softness = (v.side===u.side) ? 0.25 : 0.55; const push=overlap*softness; u.x+=nx*push; u.y+=ny*push; v.x-=nx*push; v.y-=ny*push; }
+          let hasFriendlyOverlap=false;
+          for(const v of neighbors){ if(v===u) continue; const dx=u.x-v.x, dy=u.y-v.y; const d=Math.hypot(dx,dy); const minGap=(u.radius+v.radius)*CONFIG.minGapFactor; const minDist=u.radius+v.radius;
+            if(v.side!==u.side){ if(d>0 && d<minDist){ const overlap=minDist-d+0.5; const nx=(dx===0&&dy===0)? (Math.random()*2-1) : dx/d; const ny=(dx===0&&dy===0)? (Math.random()*2-1) : dy/d; const push=overlap*0.6; u.x+=nx*push; u.y+=ny*push; v.x-=nx*push; v.y-=ny*push; } }
+            else { if(d>0 && d<minDist){ hasFriendlyOverlap=true; } }
             // When navigating between two friendlies, block if corridor narrower than minGap
             // Approximate by checking another neighbor forming a corridor
-            if(d>0 && d < minGap){
+          if(v.side!==u.side && d>0 && d < minGap){
               // Treat as blocking by marking both as locked for combat, preventing squeeze-through
-              if(v.side !== u.side) { u.lockedForCombat = true; v.lockedForCombat = true; }
+             u.lockedForCombat = true; v.lockedForCombat = true;
             }
           }
+          // restore/reset speed depending on friendly overlap state
+          if(hasFriendlyOverlap){ u.baseSpeed = Math.max(10, (u.baseSpeedOriginal||u.baseSpeed)*0.65); }
+          else { u.baseSpeed = (u.baseSpeedOriginal||u.baseSpeed); }
+          // Edge handling: gently steer units back inside instead of hard clamping
+          const margin = Math.max(u.radius+2, 6);
+          const steer = 0.5;
+          if(u.x < margin){ u.x += steer; if(u.target) u.target.x = Math.max(u.target.x, margin+10); }
+          if(u.x > canvas.width - margin){ u.x -= steer; if(u.target) u.target.x = Math.min(u.target.x, canvas.width - margin - 10); }
+          if(u.y < margin){ u.y += steer; if(u.target) u.target.y = Math.max(u.target.y, margin+10); }
+          if(u.y > canvas.height - margin){ u.y -= steer; if(u.target) u.target.y = Math.min(u.target.y, canvas.height - margin - 10); }
         }
         // Cleanup dead
         state.units = state.units.filter(u=>u.hp>0);
@@ -829,21 +990,45 @@
 
       let lastTime=performance.now();
       function update(){ const now=performance.now(); let dt=(now-lastTime)/1000; lastTime=now; dt=Math.min(dt,0.05); if(!state.paused && !state.winner){
-          // Resolve combat/collisions first so units stop before moving
-          resolveCombatAndCollisions(dt);
-          // Cities
-          for(const city of state.cities) city.update(dt,state.map);
-          // Units move/capture
-          for(const u of state.units) u.update(dt,state.map);
-          // AI
-          aiUpdate();
-          // Encirclement auto-conversion
-          checkEncirclements();
+          if(state.allowCombat){
+            // Resolve combat/collisions first so units stop before moving
+            resolveCombatAndCollisions(dt);
+            // Cities
+            for(const city of state.cities) city.update(dt,state.map);
+            // Units move/capture
+            for(const u of state.units) u.update(dt,state.map);
+            // AI
+            aiUpdate();
+            // Encirclement auto-conversion
+            checkEncirclements();
+          }
           // Victory check
           const blueCap=state.cities.find(c=>c.isCapital && c.side==='blue');
           const redCap=state.cities.find(c=>c.isCapital && c.side==='red');
-          if(!blueCap) state.winner='red';
-          if(!redCap) state.winner='blue';
+          // New win/lose logic with grace period and majority city rule
+          if(!state.originalCityCount){
+            state.originalCityCount = {
+              blue: state.cities.filter(c=>c.side==='blue' && !c.isHarbor).length,
+              red: state.cities.filter(c=>c.side==='red' && !c.isHarbor).length,
+            };
+          }
+          if(!state.grace){ state.grace = { blue: null, red: null }; }
+          function checkSide(side){
+            const capAlive = state.cities.some(c=>c.isCapital && c.side===side);
+            const currentOwned = state.cities.filter(c=>!c.isHarbor && c.side===side).length;
+            const orig = state.originalCityCount[side]||1;
+            const need = Math.ceil(orig*0.5);
+            if(capAlive) { state.grace[side]=null; return null; }
+            if(currentOwned >= need){ state.grace[side]=null; return null; }
+            if(!state.grace[side]) state.grace[side] = { start: nowSec() };
+            const elapsed = nowSec() - state.grace[side].start;
+            if(elapsed > 30) return 'lose';
+            return null;
+          }
+          const blueState = checkSide('blue');
+          const redState = checkSide('red');
+          if(blueState==='lose' && !state.winner) state.winner='red';
+          if(redState==='lose' && !state.winner) state.winner='blue';
         } }
 
       function draw(){ ctx.clearRect(0,0,canvas.width,canvas.height); drawMap(state.map); for(const c of state.cities) c.draw(ctx); 
@@ -881,7 +1066,7 @@
 
       function loop(){ update(); draw(); requestAnimationFrame(loop); }
 
-      resizeCanvasToWindow(); state=createGame(); // Wait for player to press Start
+      resizeCanvasToWindow(); state=createGame(); // Wait for player to press Start (no spawns before start due to paused state)
       // keep drawing idle scene
       loop();
     </script>
