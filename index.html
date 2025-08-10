@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Borderline RTS</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #111;
+        overflow: hidden;
+        -webkit-user-select: none;
+        user-select: none;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        color: #eee;
+      }
+      #ui {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        display: flex;
+        gap: 8px;
+        z-index: 10;
+        pointer-events: none;
+      }
+      #ui .panel {
+        pointer-events: auto;
+        background: rgba(0,0,0,0.45);
+        padding: 6px 10px;
+        border-radius: 8px;
+        border: 1px solid rgba(255,255,255,0.15);
+        -webkit-backdrop-filter: blur(2px);
+        backdrop-filter: blur(2px);
+      }
+      #ui button {
+        background: #1f6feb;
+        color: white;
+        border: none;
+        padding: 6px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      #overlay { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.5); z-index: 20; text-align: center; }
+      #overlay.show { display: flex; }
+      #overlay .card { background: rgba(0,0,0,0.75); border: 1px solid rgba(255,255,255,0.15); padding: 18px 24px; border-radius: 10px; }
+      #overlay h1 { margin: 0 0 6px 0; font-size: 28px; }
+      #overlay p { margin: 6px 0 14px 0; color: #ccc; }
+      #startOverlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 30; background: rgba(0,0,0,0.55); }
+      #startOverlay.hidden { display: none; }
+      #startOverlay .card { background: rgba(0,0,0,0.8); border: 1px solid rgba(255,255,255,0.15); padding: 22px 28px; border-radius: 12px; text-align: center; }
+      #countdown { font-size: 42px; margin-top: 8px; letter-spacing: 1px; }
+    </style>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <div id="ui">
+      <div class="panel" id="hudPanel"><div id="hudText">Loading…</div></div>
+      <div class="panel"><button id="restartBtn" title="Restart (R)">Restart</button></div>
+      <div class="panel" title="Tips">LMB drag to select • Right-click to move • A=Select all • Space=Pause</div>
+    </div>
+    <div id="overlay"><div class="card"><h1 id="resultTitle"></h1><p id="resultSubtitle"></p><button id="playAgain">Play again</button></div></div>
+    <div id="startOverlay">
+      <div class="card">
+        <h1>Borderline RTS</h1>
+        <p>Select your troops and give orders. The border shifts with presence.</p>
+        <button id="startBtn">Start</button>
+        <div id="countdown"></div>
+      </div>
+    </div>
+
+    <script>
+      const CONFIG = {
+        tileSize: 6,
+        mapCols: 128,
+        mapRows: 72,
+        baseUnit: { radius: 10, baseSpeed: 48, hp: 120, dps: 14 },
+        tankUnit: { radius: 12, baseSpeed: 30, hp: 260, dps: 28 },
+        tankChance: 0.25,
+        capturePerSecond: 22,
+        tileControlThreshold: 60,
+        cityCapturePerSecond: 16,
+        cityCaptureThreshold: 120,
+        selectionColor: 'rgba(255,255,255,0.35)',
+        team: { blue: { color: '#3ba1ff', outline: '#0c3a66' }, red: { color: '#ff4d4d', outline: '#5a0e0e' } },
+        terrain: {
+          // Main terrains
+          plains:   { color: '#90a567', move: 1.0, damageTakenMultiplier: 1.0,  healPerSecond: 0.0,  navalMove: Infinity },
+          desert:   { color: '#e0c164', move: 1.2, damageTakenMultiplier: 1.1,  healPerSecond: -0.5, navalMove: Infinity },
+          jungle:   { color: '#1b582a', move: 2.5, damageTakenMultiplier: 0.75,  healPerSecond: 3.0,  navalMove: Infinity },
+          tundra:   { color: '#a7c6d9', move: 1.1, damageTakenMultiplier: 0.95,  healPerSecond: 0.0,  navalMove: Infinity },
+          // Secondary terrains
+          forest:   { color: '#2b6a39', move: 2.0, damageTakenMultiplier: 0.8,   healPerSecond: 2.0,  navalMove: Infinity },
+          savannah: { color: '#cdbb6e', move: 1.3, damageTakenMultiplier: 1.0,   healPerSecond: 0.0,  navalMove: Infinity },
+          hills:    { color: '#caa17c', move: 3.0, damageTakenMultiplier: 0.95,  healPerSecond: 0.0,  navalMove: Infinity },
+          mountain: { color: '#6b6b6b', move: 5.0, damageTakenMultiplier: 0.7,  healPerSecond: 0.0, navalMove: Infinity },
+          river:    { color: '#2a76db', move: 3.0, damageTakenMultiplier: 1.2,   healPerSecond: -2.0, navalMove: 1.0 },
+          lake:     { color: '#1f5fb7', move: Infinity, damageTakenMultiplier: 1.0, healPerSecond: 0.0, navalMove: 1.2 },
+          ocean:    { color: '#174b9e', move: Infinity, damageTakenMultiplier: 1.0, healPerSecond: 0.0, navalMove: 1.5 },
+          water:    { color: '#3ab0c2', move: Infinity, damageTakenMultiplier: 1.05,  healPerSecond: 0.0, navalMove: 1.1 },
+          snow:     { color: '#e7f4ff', move: 1.9, damageTakenMultiplier: 0.9,   healPerSecond: 0.5,  navalMove: Infinity },
+        },
+        navalUnits: {
+          battleship: { radius: 8, baseSpeed: 36, hp: 260, dps: 30 },
+          transporter: { radius: 8, baseSpeed: 40, hp: 180, dps: 8, cargo: 5 },
+        },
+        borders: { color: '#0e0e1a', width: 3.5 },
+        // Slower than last edit but still faster than original (30s/25s)
+        spawn: { citySeconds: 20, capitalSeconds: 14 },
+        ai: { planEverySeconds: 5, groupRadius: 80, defenseRadius: 160, garrisonSize: 3, attackGroupSize: 10 },
+        frontline: { rowStep: 4, jitter: 6, unitsPerSidePerRow: 1 },
+        controls: { retreatGrace: 2.0 },
+        pathVis: { width: 2, color: 'rgba(255,255,255,0.8)', dash: [6,4] },
+        engageRadius: 18,
+        captureBlockRadius: 28,
+        movementCaptureMultiplier: 18,
+        minGapFactor: 2.0,
+        captureBrushTiles: 2,
+        encirclementCheckSeconds: 1.0,
+        cityDamageMinMultiplier: 0.6,
+        cityDamageFalloffPx: 1200,
+        friendlyCrowdSlowPerUnit: 0.35,
+        friendlyCrowdRadius: 14,
+        formation: { advanceSpeed: 24, retargetPx: 22 }
+      };
+
+      const canvas = document.getElementById('game');
+      const ctx = canvas.getContext('2d');
+      const hudText = document.getElementById('hudText');
+      const overlay = document.getElementById('overlay');
+      const resultTitle = document.getElementById('resultTitle');
+      const resultSubtitle = document.getElementById('resultSubtitle');
+      const playAgain = document.getElementById('playAgain');
+      const restartBtn = document.getElementById('restartBtn');
+      const startOverlay = document.getElementById('startOverlay');
+      const startBtn = document.getElementById('startBtn');
+      const countdownEl = document.getElementById('countdown');
+
+      function resizeCanvasToWindow() {
+        canvas.width = Math.floor(window.innerWidth);
+        canvas.height = Math.floor(window.innerHeight);
+        CONFIG.mapCols = Math.max(80, Math.floor(canvas.width / CONFIG.tileSize));
+        CONFIG.mapRows = Math.max(45, Math.floor(canvas.height / CONFIG.tileSize));
+        TILE_W = Math.floor(canvas.width / CONFIG.mapCols);
+        TILE_H = Math.floor(canvas.height / CONFIG.mapRows);
+      }
+      window.addEventListener('resize', () => { resizeCanvasToWindow(); if (state) draw(0); });
+      let TILE_W = CONFIG.tileSize, TILE_H = CONFIG.tileSize;
+
+      const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+      const dist = (x1,y1,x2,y2)=>Math.hypot(x2-x1,y2-y1);
+      const nowSec = () => performance.now()/1000;
+
+      class RNG { constructor(seed=Math.floor(Math.random()*1e9)){this.seed=seed>>>0;} next(){let x=this.seed; x^=x<<13; x^=x>>>17; x^=x<<5; this.seed=x>>>0; return this.seed/0xffffffff;} range(a,b){return a+(b-a)*this.next();} int(a,b){return Math.floor(this.range(a,b+1));} pick(arr){return arr[this.int(0,arr.length-1)];} }
+
+      // Smooth noise utilities for clumpy terrain
+      function hash2(x, y, seed){
+        let n = x * 374761393 + y * 668265263 + seed * 1442695041;
+        n = (n ^ (n >>> 13)) >>> 0; n = Math.imul(n, 1274126177) >>> 0;
+        n = (n ^ (n >>> 16)) >>> 0;
+        return n / 4294967295;
+      }
+      function valueNoise(x, y, scale, seed){
+        const fx = x / scale, fy = y / scale;
+        const x0 = Math.floor(fx), y0 = Math.floor(fy);
+        const x1 = x0 + 1, y1 = y0 + 1;
+        const sx = fx - x0, sy = fy - y0;
+        const v00 = hash2(x0, y0, seed), v10 = hash2(x1, y0, seed);
+        const v01 = hash2(x0, y1, seed), v11 = hash2(x1, y1, seed);
+        const ix0 = v00 + (v10 - v00) * (sx * sx * (3 - 2 * sx));
+        const ix1 = v01 + (v11 - v01) * (sx * sx * (3 - 2 * sx));
+        return ix0 + (ix1 - ix0) * (sy * sy * (3 - 2 * sy));
+      }
+      function fbm(x, y, scale, octaves, persistence, lacunarity, seed){
+        let amp = 1, freq = 1, sum = 0, norm = 0;
+        for(let i=0;i<octaves;i++){
+          sum += amp * valueNoise(x*freq, y*freq, scale, seed + i*1013);
+          norm += amp; amp *= persistence; freq *= lacunarity;
+        }
+        return sum / norm;
+      }
+
+      function generateMap(rng){
+        const cols=CONFIG.mapCols, rows=CONFIG.mapRows; const grid=new Array(cols*rows);
+        const noiseSeed = rng.int(0, 1e9);
+
+        // Choose main terrain and target share between 40% and 70%
+        const mains=['plains','desert','jungle','tundra'];
+        const mainTerrain = mains[rng.int(0, mains.length-1)];
+        const mainTarget = rng.range(0.4, 0.7);
+
+        // Compatibility sets for secondary terrains per main
+        const compat={
+          plains:   ['forest','hills','mountain','river','water','lake','ocean'],
+          desert:   ['savannah','hills','mountain'],
+          jungle:   ['forest','savannah','hills','mountain','river','water','lake','ocean'],
+          tundra:   ['snow','river','water','lake','ocean']
+        };
+
+        // Precompute main scores and set threshold by quantile to hit target share
+        const mainScores = new Float32Array(cols*rows);
+        for(let r=0;r<rows;r++){
+          for(let c=0;c<cols;c++){
+            const idx=r*cols+c;
+            // Low frequency fbm for clumpiness
+            mainScores[idx] = fbm(c, r, Math.max(cols,rows)*0.6, 4, 0.5, 2.0, noiseSeed + (mainTerrain.charCodeAt(0)<<8));
+          }
+        }
+        // Compute threshold
+        const sorted = Array.from(mainScores).sort((a,b)=>a-b);
+        const threshold = sorted[Math.floor((1 - mainTarget) * sorted.length)];
+
+        // Secondary noise functions (different seeds/scales)
+        function n(type, c, r){
+          switch(type){
+            case 'forest':   return fbm(c, r, Math.max(cols,rows)*0.35, 4, 0.55, 2.1, noiseSeed+101);
+            case 'savannah': return fbm(c, r, Math.max(cols,rows)*0.38, 4, 0.55, 2.1, noiseSeed+102);
+            case 'hills':    return fbm(c, r, Math.max(cols,rows)*0.40, 3, 0.5,  2.0, noiseSeed+103);
+            case 'mountain': return fbm(c, r, Math.max(cols,rows)*0.55, 5, 0.45, 2.0, noiseSeed+104);
+            case 'river':    return fbm(c, r, Math.max(cols,rows)*0.90, 3, 0.6,  2.3, noiseSeed+105);
+            case 'water':    return fbm(c, r, Math.max(cols,rows)*0.70, 3, 0.55, 2.1, noiseSeed+106);
+            case 'lake':     return fbm(c, r, Math.max(cols,rows)*0.65, 3, 0.5,  2.0, noiseSeed+107);
+            case 'ocean':    return fbm(c, r, Math.max(cols,rows)*1.20, 4, 0.55, 2.0, noiseSeed+108);
+            case 'snow':     return fbm(c, r, Math.max(cols,rows)*0.50, 4, 0.5,  2.0, noiseSeed+109);
+            default: return 0;
+          }
+        }
+
+        for(let r=0;r<rows;r++){
+          for(let c=0;c<cols;c++){
+            let terrain;
+            const idx=r*cols+c;
+            if(mainScores[idx] >= threshold){
+              terrain = mainTerrain;
+            } else {
+              // Pick best compatible secondary by noise strength
+              const allowed = compat[mainTerrain];
+              let best='plains', bestVal=-1;
+              for(const k of allowed){ const v=n(k, c, r); if(v>bestVal){ bestVal=v; best=k; } }
+              terrain = best;
+            }
+            grid[idx] = { terrain, owner: c < cols/2 ? 'blue' : 'red', control: c<cols/2 ? CONFIG.tileControlThreshold : -CONFIG.tileControlThreshold };
+          }
+        }
+
+        // Enforce presence: carve oceans and rivers when compatible and scarce
+        function count(type){ let ct=0; for(const t of grid) if(t.terrain===type) ct++; return ct; }
+        function setTerrain(c,r,type){ if(c<0||r<0||c>=cols||r>=rows) return; grid[r*cols+c].terrain=type; }
+        // Ensure ocean coastline if allowed
+        if(compat[mainTerrain].includes('ocean') && count('ocean') < cols*rows*0.03){
+          const side = rng.next()<0.5 ? 0 : cols-1;
+          const width = Math.max(4, Math.floor(cols*0.1 + rng.range(0, cols*0.08)));
+          if(side===0){ for(let r=0;r<rows;r++) for(let c=0;c<width;c++) setTerrain(c,r,'ocean'); }
+          else { for(let r=0;r<rows;r++) for(let c=cols-width;c<cols;c++) setTerrain(c,r,'ocean'); }
+        }
+        // Carve rivers if allowed and none detected
+        function carveRiver(startC){
+          let c=startC, r=0; let dir=(rng.next()<0.5? -1: 1);
+          while(r<rows){
+            setTerrain(c,r,'river'); setTerrain(c+1,r,'river'); // 2-wide
+            // meander
+            if(r%3===0){ c += dir*(rng.next()<0.5?1:0); }
+            // bias towards center to avoid sticking to edge
+            const bias = Math.sign((cols/2)-c);
+            if(r%5===0 && rng.next()<0.6) c += bias;
+            c = clamp(c,1,cols-2); r++;
+            // stop when we hit ocean
+            if(grid[r*cols + c] && grid[r*cols + c].terrain==='ocean') break;
+          }
+        }
+        if(compat[mainTerrain].includes('river')){
+          let existingRivers = count('river');
+          if(existingRivers < cols){
+            const rivers = 2 + (rng.next()<0.5?1:0);
+            for(let i=0;i<rivers;i++){ carveRiver(rng.int(Math.floor(cols*0.2), Math.floor(cols*0.8))); }
+          }
+        }
+
+        // Smoothing pass to clump tiles (remove speckles)
+        function smooth(pass){
+          const copy = grid.map(t=>t.terrain);
+          for(let r=1;r<rows-1;r++){
+            for(let c=1;c<cols-1;c++){
+              const i=r*cols+c; const t=copy[i];
+              const neighbors=[copy[i-1],copy[i+1],copy[i-cols],copy[i+cols]];
+              const counts={}; for(const nval of neighbors){ counts[nval]=(counts[nval]||0)+1; }
+              let best=t, bestCt=0; for(const k in counts){ if(counts[k]>bestCt){ best=k; bestCt=counts[k]; } }
+              if(bestCt>=3) grid[i].terrain=best;
+            }
+          }
+        }
+        smooth(); smooth();
+        const mid=Math.floor(cols/2); for(let r=0;r<rows;r++){for(let c of [mid-1, mid]){const t=grid[r*cols+c]; t.owner = c<mid? 'blue':'red'; t.control=(c<mid?1:-1)*CONFIG.tileControlThreshold;}}
+
+        // Adjust final share to ensure main terrain is within 40%-70%
+        const mainCount = grid.filter(t=>t.terrain===mainTerrain).length;
+        const fraction = mainCount / grid.length;
+        if (fraction < 0.4 || fraction > 0.7) {
+          const target = clamp(mainTarget, 0.4, 0.7);
+          const need = Math.floor(target * grid.length) - mainCount;
+          if (need > 0) {
+            // Promote strong-main candidates
+            const candidates = [];
+            for(let r=0;r<rows;r++){
+              for(let c=0;c<cols;c++){
+                const i=r*cols+c; const t=grid[i]; if(t.terrain===mainTerrain) continue;
+                // Recompute local main strength cheaply
+                const local = Math.random(); // fallback randomness to avoid heavy recomputation
+                candidates.push({i,score:local});
+              }
+            }
+            candidates.sort((a,b)=>b.score-a.score);
+            for(let k=0;k<Math.min(need,candidates.length);k++) grid[candidates[k].i].terrain = mainTerrain;
+          } else if (need < 0) {
+            // Demote some main tiles near secondary strengths randomly
+            let toDemote = -need;
+            for(let r=0;r<rows && toDemote>0;r++){
+              for(let c=0;c<cols && toDemote>0;c++){
+                const i=r*cols+c; const t=grid[i]; if(t.terrain!==mainTerrain) continue;
+                if (Math.random()<0.2){ t.terrain = 'plains'; toDemote--; }
+              }
+            }
+          }
+        }
+        return {cols, rows, tiles:grid};
+      }
+      function tileAt(map,c,r){ if(c<0||r<0||c>=map.cols||r>=map.rows) return null; return map.tiles[r*map.cols+c]; }
+      function worldToCell(x,y){ return { c: clamp(Math.floor(x/TILE_W),0,CONFIG.mapCols-1), r: clamp(Math.floor(y/TILE_H),0,CONFIG.mapRows-1) }; }
+      function cellCenter(c,r){ return { x: (c+0.5)*TILE_W, y: (r+0.5)*TILE_H }; }
+
+      // A* on grid (supports naval)
+      function findPath(map, startC,startR,endC,endR, isNaval=false){
+        const cols=map.cols, rows=map.rows; const start=startR*cols+startC; const goal=endR*cols+endC;
+        const closed=new Uint8Array(cols*rows); const g=new Float32Array(cols*rows); const f=new Float32Array(cols*rows); const came=new Int32Array(cols*rows); came.fill(-1); for(let i=0;i<g.length;i++){g[i]=Infinity; f[i]=Infinity;} g[start]=0;
+        const h=(i)=>{const c=i%cols, r=(i/cols)|0; return Math.abs(c-endC)+Math.abs(r-endR);} ; f[start]=h(start);
+        const open=[start]; const up=(i)=>{while(i>0){const p=(i-1)>>1; if(f[open[p]]<=f[open[i]]) break; [open[p],open[i]]=[open[i],open[p]]; i=p;}}; const down=(i)=>{for(;;){let l=(i<<1)+1, r=l+1, s=i; if(l<open.length && f[open[l]]<f[open[s]]) s=l; if(r<open.length && f[open[r]]<f[open[s]]) s=r; if(s===i) break; [open[s],open[i]]=[open[i],open[s]]; i=s;}}; const push=(n)=>{open.push(n); up(open.length-1);} ; const pop=()=>{const t=open[0]; const last=open.pop(); if(open.length){open[0]=last; down(0);} return t;};
+        const passableCell=(c,r)=>{
+          const t=tileAt(map,c,r); if(!t) return false;
+          if(isNaval) return CONFIG.terrain[t.terrain].navalMove !== Infinity;
+          return CONFIG.terrain[t.terrain].move!==Infinity;
+        };
+        const moveCost=(fc,fr,tc,tr)=>{const t=tileAt(map,tc,tr); const d=(fc!==tc && fr!==tr)?Math.SQRT2:1; return d*(isNaval?CONFIG.terrain[t.terrain].navalMove:CONFIG.terrain[t.terrain].move);};
+        while(open.length){
+          const cur=pop(); if(cur===goal){ const path=[]; let p=cur; while(p!==start){ path.push({c:p%cols, r:(p/cols)|0}); p=came[p]; } path.push({c:startC,r:startR}); path.reverse(); return path; }
+          closed[cur]=1; const cc=cur%cols, rr=(cur/cols)|0;
+          for(let dr=-1; dr<=1; dr++) for(let dc=-1; dc<=1; dc++){
+            if(!dc && !dr) continue; const nc=cc+dc, nr=rr+dr; if(!passableCell(nc,nr)) continue; const ni=nr*cols+nc; if(closed[ni]) continue; const tg=g[cur]+moveCost(cc,rr,nc,nr); if(tg<g[ni]){came[ni]=cur; g[ni]=tg; f[ni]=tg+h(ni); if(!open.includes(ni)) push(ni);} }
+        }
+        return null;
+      }
+
+      class Unit{
+        constructor(x,y,side,isTank=false){ this.x=x; this.y=y; this.side=side; this.isTank=isTank; const a=isTank?CONFIG.tankUnit:CONFIG.baseUnit; this.radius=a.radius; this.baseSpeed=a.baseSpeed; this.maxHp=a.hp; this.hp=this.maxHp; this.dps=a.dps; this.selected=false; this.path=null; this.pathIndex=0; this.target=null; this.engaged=false; this.lockedForCombat=false; this.retreatUntil=0; this.isRetreating=false; this.lastPos={x,y}; this.type='land'; }
+        setTarget(x,y,map){ this.target={x,y}; const s=worldToCell(this.x,this.y); const e=worldToCell(x,y); const path=findPath(map,s.c,s.r,e.c,e.r,false); this.path=path; this.pathIndex=0; this.retreatUntil = nowSec() + CONFIG.controls.retreatGrace; }
+        update(dt,map){
+          // Movement is skipped if locked in combat
+          const canForceMove = nowSec() < this.retreatUntil; // potential retreat window
+          this.engaged = this.lockedForCombat;
+          if(this.path && this.pathIndex < this.path.length){
+            // If enemies block next waypoint within collision radius, do not advance unless not blocked
+            let advancementAllowed = true;
+            const nextNode = this.path[this.pathIndex];
+            const nextCenter = nextNode ? cellCenter(nextNode.c, nextNode.r) : null;
+            if(nextCenter){
+              const nearby = getUnitsInRadius(nextCenter.x, nextCenter.y, CONFIG.engageRadius+4);
+              const blockers = nearby.some(n => n.side !== this.side);
+              if(blockers) advancementAllowed = false;
+            }
+            // If currently in combat, can advance only within own controlled territory
+            if(this.lockedForCombat){
+              const canGo = isPathInsideOwnedTerritory(this, this.pathIndex, map);
+              advancementAllowed = advancementAllowed && canGo;
+            }
+            // moving back counts as retreat
+            this.isRetreating = false;
+            if(nextCenter){ const toNextX = nextCenter.x - this.x; const toNextY = nextCenter.y - this.y; const lastMoveX = this.x - this.lastPos.x; const lastMoveY = this.y - this.lastPos.y; const dot = toNextX*lastMoveX + toNextY*lastMoveY; if(dot < 0) this.isRetreating = true; }
+
+            // Only allow movement when corridor is clear (forward), or when retreating and corridor is clear behind
+            if(advancementAllowed || (canForceMove && this.isRetreating)){
+            const node=this.path[this.pathIndex]; const {x:tx,y:ty}=cellCenter(node.c,node.r); const dx=tx-this.x, dy=ty-this.y; const d=Math.hypot(dx,dy);
+            const tile=tileAt(map,node.c,node.r); const slow=CONFIG.terrain[tile.terrain].move; const speed=slow===Infinity ? 0 : this.baseSpeed/slow; const step=speed*dt;
+            if(d<=step){ this.lastPos={x:this.x,y:this.y}; this.x=tx; this.y=ty; this.pathIndex++; if(this.pathIndex>=this.path.length){ this.path=null; this.pathIndex=0; } }
+            else { this.lastPos={x:this.x,y:this.y}; this.x += (dx/d)*step; this.y += (dy/d)*step; }
+            }
+          }
+          // Formation persistence: if unit has a formation, continuously re-space along line
+          if(this.formation && (!this.path || this.path.length===0)){
+            const f=this.formation; const N=1; // per unit recompute own slot target
+            const pts=f.points; if(pts && pts.length>1){
+              const total=f.totalLength; const k=f.slotIndex+1; const d=(k/(f.slotIndexCount||0 || (pts.length))) * total; // fallback
+              // better: normalize by intended count: reuse slotIndex with Nknown passed via formationCount
+              const desiredDist = (k/((f.count||0)||1+1))*total;
+              const tgt = (function pointAtDist(d){ let acc=0; for(let i=1;i<pts.length;i++){ const ax=pts[i-1].x, ay=pts[i-1].y, bx=pts[i].x, by=pts[i].y; const segLen=Math.hypot(bx-ax,by-ay); if(acc+segLen >= d){ const t=(d-acc)/segLen; return {x:ax+(bx-ax)*t, y:ay+(by-ay)*t}; } acc+=segLen; } return pts[pts.length-1]; })(desiredDist);
+              const dx=tgt.x-this.x, dy=tgt.y-this.y; const distTo=Math.hypot(dx,dy);
+              if(distTo>CONFIG.formation.retargetPx){ this.setTarget(tgt.x, tgt.y, map); }
+            }
+          }
+          // Territory capture from presence (instant paint) with dynamic radius slightly larger than unit
+          const cell=worldToCell(this.x,this.y);
+          const radiusPx = this.radius + 8; // slightly bigger than unit
+          const radX = Math.ceil(radiusPx / TILE_W);
+          const radY = Math.ceil(radiusPx / TILE_H);
+          for(let dr=-radY; dr<=radY; dr++){
+            for(let dc=-radX; dc<=radX; dc++){
+              const c = clamp(cell.c+dc, 0, map.cols-1), r = clamp(cell.r+dr, 0, map.rows-1);
+              const tt = tileAt(map,c,r);
+              if(!tt || CONFIG.terrain[tt.terrain].move === Infinity) continue;
+              const center = cellCenter(c,r);
+              if(Math.hypot(center.x - this.x, center.y - this.y) > radiusPx + Math.max(TILE_W,TILE_H)*0.3) continue;
+              const nearby = getUnitsInRadius(center.x, center.y, CONFIG.captureBlockRadius);
+              const enemyNearby = nearby.some(n => n.side !== this.side);
+              if(!enemyNearby){ tt.control = (this.side==='blue' ? 1 : -1) * CONFIG.tileControlThreshold; }
+              if(tt.control>=CONFIG.tileControlThreshold*0.5) tt.owner='blue';
+              if(tt.control<=-CONFIG.tileControlThreshold*0.5) tt.owner='red';
+            }
+          }
+          // Terrain-based healing or attrition
+          const curTile = tileAt(map, cell.c, cell.r);
+          if(curTile){ const heal = CONFIG.terrain[curTile.terrain].healPerSecond || 0; if(heal !== 0){ this.hp = clamp(this.hp + heal*dt, 0, this.maxHp); } }
+        }
+        draw(ctx){
+          const team=CONFIG.team[this.side]; const shake=this.engaged ? (Math.random()-0.5)*1.2 : 0; ctx.save(); ctx.translate(shake,shake);
+          ctx.beginPath(); ctx.arc(this.x,this.y,this.radius,0,Math.PI*2); ctx.fillStyle=team.color; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=team.outline; ctx.stroke();
+          if(this.isTank){ ctx.beginPath(); const s=this.radius*1.1; ctx.rect(this.x-s/2,this.y-s/2,s,s); ctx.strokeStyle='#111'; ctx.lineWidth=1.4; ctx.stroke(); }
+          if(this.selected){ ctx.beginPath(); ctx.arc(this.x,this.y,this.radius+3,0,Math.PI*2); ctx.strokeStyle='rgba(255,255,255,0.9)'; ctx.lineWidth=1.2; ctx.stroke(); }
+          if(this.hp < this.maxHp){ const pct=clamp(this.hp/this.maxHp,0,1); ctx.beginPath(); ctx.strokeStyle = pct>0.5 ? '#5fe35f' : (pct>0.25 ? '#ffd056' : '#ff6b6b'); ctx.lineWidth=2; ctx.arc(this.x,this.y,this.radius+5,-Math.PI/2,-Math.PI/2+Math.PI*2*pct); ctx.stroke(); }
+          ctx.restore();
+        }
+      }
+
+      class City{
+        constructor(x,y,side,isCapital=false){ this.x=x; this.y=y; this.side=side; this.isCapital=isCapital; this.spawnTimer=0; this.control=(this.side==='blue'?1:-1)*CONFIG.cityCaptureThreshold; this.radius=12; this.alive=true; this.isHarbor=false; }
+        update(dt,map){
+          const influenceRadius=32; const nearUnits=getUnitsInRadius(this.x,this.y,influenceRadius);
+          for(const u of nearUnits){ const delta=CONFIG.cityCapturePerSecond*dt*(u.side==='blue'?1:-1); this.control=clamp(this.control+delta,-CONFIG.cityCaptureThreshold,CONFIG.cityCaptureThreshold); }
+          const was=this.side; if(this.control>=CONFIG.cityCaptureThreshold*0.5) this.side='blue'; if(this.control<=-CONFIG.cityCaptureThreshold*0.5) this.side='red';
+          if(this.side!==was){ const cell=worldToCell(this.x,this.y); for(let dr=-2; dr<=2; dr++) for(let dc=-2; dc<=2; dc++){ const c=clamp(cell.c+dc,0,map.cols-1), r=clamp(cell.r+dr,0,map.rows-1); const t=tileAt(map,c,r); if(!t) continue; t.owner=this.side; t.control=(this.side==='blue'?1:-1)*CONFIG.tileControlThreshold; } }
+          // Pause production if combat near city
+          const hasCombatNearby = nearUnits.some(u=>{
+            const others = getUnitsInRadius(u.x, u.y, CONFIG.engageRadius);
+            return others.some(o=>o.side!==u.side);
+          });
+          if(!hasCombatNearby){
+            this.spawnTimer+=dt; const interval=this.isHarbor ? (CONFIG.spawn.citySeconds*6) : (this.isCapital?CONFIG.spawn.capitalSeconds:CONFIG.spawn.citySeconds);
+            if(this.spawnTimer>=interval){ this.spawnTimer=0; if(this.isHarbor){ spawnNavalUnitNearHarbor(this); } else { spawnUnitNearCity(this); if(this.isCapital){ spawnUnitNearCity(this); } } }
+          } else {
+            this.spawnTimer = 0; // reset while under attack
+          }
+        }
+        draw(ctx){ const team=CONFIG.team[this.side]; ctx.beginPath(); ctx.arc(this.x,this.y,this.radius+8,0,Math.PI*2); ctx.fillStyle=this.isCapital?'rgba(255,215,64,0.12)':(this.isHarbor?'rgba(64,211,255,0.12)':'rgba(255,255,255,0.06)'); ctx.fill(); ctx.beginPath(); ctx.arc(this.x,this.y,this.radius,0,Math.PI*2); ctx.fillStyle=team.color; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=team.outline; ctx.stroke(); if(this.isCapital){ drawStar(ctx,this.x,this.y,5,this.radius*0.8,this.radius*0.4,'#ffd740'); } else if(this.isHarbor){ ctx.beginPath(); ctx.rect(this.x-5,this.y-5,10,10); ctx.strokeStyle='#40d3ff'; ctx.lineWidth=1.4; ctx.stroke(); } else { ctx.beginPath(); ctx.arc(this.x,this.y,3,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); } const pct=(this.control+CONFIG.cityCaptureThreshold)/(2*CONFIG.cityCaptureThreshold); ctx.beginPath(); ctx.lineWidth=3; ctx.strokeStyle=this.isHarbor?'#40d3ff':'#ffd740'; ctx.arc(this.x,this.y,this.radius+11,-Math.PI/2,-Math.PI/2+Math.PI*2*pct); ctx.stroke(); }
+      }
+      function drawStar(ctx,x,y,spikes,outerRadius,innerRadius,color){ let rot=Math.PI/2*3; let step=Math.PI/spikes; ctx.beginPath(); ctx.moveTo(x,y-outerRadius); for(let i=0;i<spikes;i++){ let cx=x+Math.cos(rot)*outerRadius, cy=y+Math.sin(rot)*outerRadius; ctx.lineTo(cx,cy); rot+=step; cx=x+Math.cos(rot)*innerRadius; cy=y+Math.sin(rot)*innerRadius; ctx.lineTo(cx,cy); rot+=step; } ctx.lineTo(x,y-outerRadius); ctx.closePath(); ctx.fillStyle=color; ctx.fill(); }
+
+      // Spatial hashing
+      let spatial;
+      function rebuildSpatial(){ const cols=Math.ceil(canvas.width/40), rows=Math.ceil(canvas.height/40); const cells=new Array(cols*rows); for(let i=0;i<cells.length;i++) cells[i]=[]; const index=(x,y)=>{const c=clamp(Math.floor(x/40),0,cols-1); const r=clamp(Math.floor(y/40),0,rows-1); return r*cols+c;}; for(const u of state.units) cells[index(u.x,u.y)].push(u); spatial={cols,rows,cells,index}; }
+      function getUnitsInRadius(x,y,radius){ const results=[]; if(!spatial) return results; const minC=clamp(Math.floor((x-radius)/40),0,spatial.cols-1); const maxC=clamp(Math.floor((x+radius)/40),0,spatial.cols-1); const minR=clamp(Math.floor((y-radius)/40),0,spatial.rows-1); const maxR=clamp(Math.floor((y+radius)/40),0,spatial.rows-1); for(let r=minR;r<=maxR;r++) for(let c=minC;c<=maxC;c++){ const arr=spatial.cells[r*spatial.cols+c]; for(const u of arr){ if(Math.hypot(u.x-x,u.y-y)<=radius) results.push(u); } } return results; }
+
+      // Check if a unit's planned path corridor is free of enemy units
+      function isPathCorridorClear(unit, startIndex){
+        if(!unit.path || startIndex>=unit.path.length) return true;
+        let p0 = { x: unit.x, y: unit.y };
+        const R = CONFIG.engageRadius + 8;
+          const lookAhead = Math.min(unit.path.length - 1, startIndex + 3);
+        for(let i=startIndex; i<=lookAhead; i++){
+          const node = unit.path[i];
+          const p1 = cellCenter(node.c, node.r);
+          const dx = p1.x - p0.x, dy = p1.y - p0.y; const len = Math.hypot(dx,dy);
+          if(len === 0){ p0 = p1; continue; }
+          const step = Math.max(8, R * 0.7);
+          for(let s=0; s<=len; s+=step){
+            const sx = p0.x + dx * (s/len), sy = p0.y + dy * (s/len);
+            const near = getUnitsInRadius(sx, sy, R);
+            if(near.some(n => n.side !== unit.side)) return false;
+          }
+          p0 = p1;
+        }
+        return true;
+      }
+
+      function isPathInsideOwnedTerritory(unit, startIndex, map){
+        if(!unit.path || startIndex>=unit.path.length) return true;
+        const lookAhead = Math.min(unit.path.length - 1, startIndex + 3);
+        for(let i=startIndex; i<=lookAhead; i++){
+          const node = unit.path[i];
+          const t = tileAt(map, node.c, node.r);
+          if(!t) continue;
+          if((unit.side === 'blue' && t.owner !== 'blue') || (unit.side === 'red' && t.owner !== 'red')){
+            return false;
+          }
+        }
+        return true;
+      }
+
+      // Game state
+      let state=null;
+      function createGame(seed){ const rng=new RNG(seed); const map=generateMap(rng); const cities=[]; function placeCity(side,isCapital){ for(let tries=0; tries<4000; tries++){ const c = side==='blue'? rng.int(3, Math.floor(map.cols/2)-5) : rng.int(Math.ceil(map.cols/2)+4, map.cols-4); const r=rng.int(4,map.rows-5); const t=tileAt(map,c,r); if(!t) continue; if(['ocean','lake','water','river','mountain'].includes(t.terrain)) continue; const {x,y}=cellCenter(c,r); if(cities.some(ci=>dist(ci.x,ci.y,x,y)<90)) continue; cities.push(new City(x,y,side,isCapital)); return; } }
+        for(const side of ['blue','red']){ placeCity(side,true); for(let i=0;i<4;i++) placeCity(side,false); }
+        // Place harbors
+        function isCoast(c,r){ const t=tileAt(map,c,r); if(!t) return false; if(['ocean','lake','water','river'].includes(t.terrain)) return false; const dirs=[[1,0],[-1,0],[0,1],[0,-1]]; for(const [dc,dr] of dirs){ const tt=tileAt(map,c+dc,r+dr); if(tt && ['ocean','lake','water','river'].includes(tt.terrain)) return true; } return false; }
+        function placeHarbors(side){ let placed=0; let attempts=0; while(placed<3 && attempts<10000){ attempts++; const c = side==='blue'? rng.int(2, Math.floor(map.cols/2)-6) : rng.int(Math.ceil(map.cols/2)+5, map.cols-3); const r=rng.int(3,map.rows-4); if(!isCoast(c,r)) continue; const {x,y}=cellCenter(c,r); if(cities.some(ci=>dist(ci.x,ci.y,x,y)<120)) continue; const harbor=new City(x,y,side,false); harbor.isHarbor=true; cities.push(harbor); placed++; } }
+        for(const side of ['blue','red']) placeHarbors(side);
+        const units=[]; const lastPlanAt={red:0}; const st={ rng, map, cities, units, lastPlanAt, startedAt: nowSec(), paused:false, winner:null, allowCombat:false, countdownActive:true };
+        // Initial frontline troops on both sides
+        spawnFrontlineUnits(st);
+        return st; }
+
+      function terrainPassable(t){ return CONFIG.terrain[t.terrain].move !== Infinity; }
+      function spawnFrontlineUnits(st){ const {map}=st; const mid=Math.floor(map.cols/2); const step=CONFIG.frontline.rowStep; const offsetCells = Math.max(3, Math.ceil((CONFIG.engageRadius+12)/TILE_W)); for(let r=2; r<map.rows-2; r+=step){
+          // find blue-side passable tile away from border
+          let bc=null; for(let c=mid-1-offsetCells; c>=Math.max(1,mid-16); c--){ const t=tileAt(map,c,r); if(t && terrainPassable(t)) { bc=c; break; } }
+          // find red-side passable tile away from border
+          let rc=null; for(let c=mid+offsetCells; c<Math.min(map.cols-2, mid+16); c++){ const t=tileAt(map,c,r); if(t && terrainPassable(t)) { rc=c; break; } }
+          const count = CONFIG.frontline.unitsPerSidePerRow;
+          if(bc!=null){ const base=cellCenter(bc,r); for(let i=0;i<count;i++){ const j=(Math.random()-0.5)*CONFIG.frontline.jitter; const off=(i-(count-1)/2)*12; const u=new Unit(base.x-6+off, base.y+j, 'blue', Math.random()<0.18); st.units.push(u);} }
+          if(rc!=null){ const base=cellCenter(rc,r); for(let i=0;i<count;i++){ const j=(Math.random()-0.5)*CONFIG.frontline.jitter; const off=(i-(count-1)/2)*12; const u=new Unit(base.x+6+off, base.y+j, 'red', Math.random()<0.18); st.units.push(u);} }
+        }
+      }
+
+      function spawnUnitNearCity(city){
+        // Land-only spawn: avoid water/ocean/lake tiles
+        for(let tries=0; tries<50; tries++){
+          const angle=Math.random()*Math.PI*2; const radius=city.radius+10+Math.random()*12; const x=city.x+Math.cos(angle)*radius; const y=city.y+Math.sin(angle)*radius;
+          const cell=worldToCell(x,y); const t=tileAt(state.map, cell.c, cell.r);
+          if(!t) continue; const terr=t.terrain; if(['ocean','lake','water','river'].includes(terr)) continue; // exclude river too
+          const isTank=Math.random()<CONFIG.tankChance; state.units.push(new Unit(x,y,city.side,isTank)); break;
+        }
+      }
+
+      class NavalUnit extends Unit{
+        constructor(x,y,side,type){ super(x,y,side,false); const a=CONFIG.navalUnits[type]; this.radius=a.radius; this.baseSpeed=a.baseSpeed; this.maxHp=a.hp; this.hp=this.maxHp; this.dps=a.dps; this.type=type; this.isNaval=true; this.cargo = type==='transporter' ? (CONFIG.navalUnits.transporter.cargo||5) : 0; }
+        setTarget(x,y,map){ this.target={x,y}; const s=worldToCell(this.x,this.y); const e=worldToCell(x,y); const path=findPath(map,s.c,s.r,e.c,e.r,true); this.path=path; this.pathIndex=0; }
+        update(dt,map){
+          // Movement on naval tiles only
+          this.engaged=this.lockedForCombat;
+          if(this.path && this.pathIndex < this.path.length){
+            const node=this.path[this.pathIndex]; const {x:tx,y:ty}=cellCenter(node.c,node.r);
+            const dx=tx-this.x, dy=ty-this.y; const d=Math.hypot(dx,dy);
+            const tile=tileAt(map,node.c,node.r); const slow=CONFIG.terrain[tile.terrain].navalMove; const speed=slow===Infinity?0:this.baseSpeed/slow; const step=speed*dt;
+            if(d<=step){ this.x=tx; this.y=ty; this.pathIndex++; if(this.pathIndex>=this.path.length){ this.path=null; this.pathIndex=0; } }
+            else { this.x += (dx/d)*step; this.y += (dy/d)*step; }
+          }
+          // Transporter landing
+          if(this.type==='transporter' && this.cargo>0){
+            const cell=worldToCell(this.x,this.y); const t=tileAt(map,cell.c,cell.r);
+            if(t && ['ocean','lake','water','river'].includes(t.terrain)){
+              // Check adjacent land tile
+              const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
+              for(const [dc,dr] of dirs){ const c=cell.c+dc, r=cell.r+dr; const tt=tileAt(map,c,r); if(!tt) continue; if(CONFIG.terrain[tt.terrain].move!==Infinity){
+                // Drop cargo on land
+                for(let i=0;i<this.cargo;i++){ const jitter=()=> (Math.random()-0.5)*8; const p=cellCenter(c,r); state.units.push(new Unit(p.x+jitter(), p.y+jitter(), this.side, Math.random()<0.1)); }
+                this.hp=0; break;
+              } }
+            }
+          }
+        }
+        draw(ctx){
+          const team=CONFIG.team[this.side]; ctx.save(); const engagedShake=this.engaged?(Math.random()-0.5)*1.0:0; ctx.translate(engagedShake,engagedShake);
+          ctx.beginPath(); ctx.arc(this.x,this.y,this.radius,0,Math.PI*2); ctx.fillStyle=team.color; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=team.outline; ctx.stroke();
+          if(this.type==='battleship'){
+            ctx.beginPath(); const w=this.radius*1.6, h=this.radius*0.9; ctx.ellipse(this.x,this.y,w/2,h/2,0,0,Math.PI*2); ctx.strokeStyle='#0af'; ctx.lineWidth=1.4; ctx.stroke();
+          } else if(this.type==='transporter'){
+            ctx.beginPath(); const s=this.radius*1.2; ctx.moveTo(this.x, this.y - s/2); ctx.lineTo(this.x - s/2, this.y + s/2); ctx.lineTo(this.x + s/2, this.y + s/2); ctx.closePath(); ctx.strokeStyle='#0af'; ctx.lineWidth=1.4; ctx.stroke();
+          }
+          if(this.selected){ ctx.beginPath(); ctx.arc(this.x,this.y,this.radius+3,0,Math.PI*2); ctx.strokeStyle='rgba(255,255,255,0.9)'; ctx.lineWidth=1.2; ctx.stroke(); }
+          ctx.restore();
+        }
+      }
+
+      function spawnNavalUnitNearHarbor(harbor){
+        // Alternate cycles for battleship vs transporter per requested rates
+        harbor._navalCycle = (harbor._navalCycle||0) + 1;
+        const produceTransporter = (harbor._navalCycle % 3 === 0); // 1 per 3 cycles
+        const produceBattleship = (harbor._navalCycle % 5 === 0);  // 1 per 5 cycles
+        const dirs=[[1,0],[-1,0],[0,1],[0,-1]]; const cell=worldToCell(harbor.x, harbor.y);
+        function trySpawn(type){
+          for(const [dc,dr] of dirs){ const c=cell.c+dc, r=cell.r+dr; const t=tileAt(state.map,c,r); if(!t) continue; if(CONFIG.terrain[t.terrain].navalMove!==Infinity){ const p=cellCenter(c,r); state.units.push(new NavalUnit(p.x, p.y, harbor.side, type)); return true; } }
+          return false;
+        }
+        if(produceBattleship) { if(trySpawn('battleship')) return; }
+        if(produceTransporter) { if(trySpawn('transporter')) return; }
+        // fallback try spawning at least one naval unit if neither condition hit this cycle
+        trySpawn(Math.random()<0.5?'battleship':'transporter');
+      }
+
+      // Input
+      let mouse={x:0,y:0}; let drag=null; canvas.addEventListener('mousemove',e=>{ const rect=canvas.getBoundingClientRect(); mouse.x=e.clientX-rect.left; mouse.y=e.clientY-rect.top; if(drag){ drag.x1=mouse.x; drag.y1=mouse.y; } });
+      canvas.addEventListener('mousedown',e=>{ if(state.winner) return; if(e.button===0){ drag={x0:mouse.x,y0:mouse.y,x1:mouse.x,y1:mouse.y}; }});
+      canvas.addEventListener('mouseup',e=>{ if(state.winner) return; if(e.button===0){ const box=drag; drag=null; if(!box) return; const moved=Math.hypot(box.x1-box.x0,box.y1-box.y0)>4; if(moved){ const minX=Math.min(box.x0,box.x1), maxX=Math.max(box.x0,box.x1); const minY=Math.min(box.y0,box.y1), maxY=Math.max(box.y0,box.y1); for(const u of state.units) u.selected=false; for(const u of state.units){ if(u.side!=='blue') continue; if(u.x>=minX && u.x<=maxX && u.y>=minY && u.y<=maxY) u.selected=true; } } else { let picked=null, best=12; for(const u of state.units){ if(u.side!=='blue') continue; const d=Math.hypot(u.x-mouse.x,u.y-mouse.y); if(d<best){ best=d; picked=u; } } if(picked){ for(const u of state.units) u.selected=false; picked.selected=true; } } }});
+      // Right-click drag formation line (offensive line) instead of path following
+      let rdrag=null; // {points:[{x,y}], active:boolean}
+      let suppressContextMenuOnce=false;
+      canvas.addEventListener('contextmenu',e=>{
+        e.preventDefault(); if(state.winner) return false;
+        if(suppressContextMenuOnce){ suppressContextMenuOnce=false; return false; }
+        const selected=state.units.filter(u=>u.selected && u.side==='blue');
+        // If not dragging a line (or line too short), treat as single-click ring formation
+        const isDraggingLine = rdrag && rdrag.active && rdrag.points && rdrag.points.length>1;
+        if(selected.length && !isDraggingLine){
+          const center={x:mouse.x,y:mouse.y}; const ring=Math.max(18, Math.sqrt(selected.length)*10);
+          for(let i=0;i<selected.length;i++){
+            const angle=(i/selected.length)*Math.PI*2; const x=center.x+Math.cos(angle)*ring; const y=center.y+Math.sin(angle)*ring;
+            selected[i].setTarget(x,y,state.map); selected[i].lockedForCombat=false;
+          }
+        }
+        return false;
+      });
+      canvas.addEventListener('mousedown', e=>{ if(e.button===2){ rdrag={points:[{x:mouse.x,y:mouse.y}], active:true}; } });
+      canvas.addEventListener('mousemove', e=>{ if(rdrag && rdrag.active){ const last=rdrag.points[rdrag.points.length-1]; const dx=mouse.x-last.x, dy=mouse.y-last.y; if(Math.hypot(dx,dy)>10){ rdrag.points.push({x:mouse.x,y:mouse.y}); } } });
+      window.addEventListener('mouseup', e=>{
+        if(rdrag && e.button===2){
+          const selected=state.units.filter(u=>u.selected && u.side==='blue');
+          if(selected.length && rdrag.points.length>1){
+            const pts=rdrag.points.slice();
+            // Polyline total length
+            let total=0; for(let i=1;i<pts.length;i++) total+=Math.hypot(pts[i].x-pts[i-1].x, pts[i].y-pts[i-1].y);
+            // Sample exactly N points along polyline at equal arc lengths
+            const N=selected.length; const targets=[];
+            function pointAtDist(d){
+              let acc=0; for(let i=1;i<pts.length;i++){
+                const ax=pts[i-1].x, ay=pts[i-1].y, bx=pts[i].x, by=pts[i].y; const segLen=Math.hypot(bx-ax,by-ay);
+                if(acc+segLen >= d){ const t=(d-acc)/segLen; return {x:ax+(bx-ax)*t, y:ay+(by-ay)*t}; }
+                acc+=segLen;
+              }
+              return pts[pts.length-1];
+            }
+            for(let k=1;k<=N;k++){
+              const d = (k/(N+1))*total; targets.push(pointAtDist(d));
+            }
+            // Assign targets with formation metadata
+            const formationId = Math.floor(Math.random()*1e9);
+            for(let i=0;i<N;i++){
+              const u=selected[i]; const tgt=targets[i];
+              u.formation = { id: formationId, points: pts, slotIndex: i, totalLength: total, count: N };
+              u.setTarget(tgt.x, tgt.y, state.map); u.lockedForCombat=false;
+            }
+            // prevent contextmenu ring override after draw commit
+            suppressContextMenuOnce=true; setTimeout(()=>{ suppressContextMenuOnce=false; }, 100);
+          }
+          rdrag=null;
+        }
+      });
+      window.addEventListener('keydown',e=>{ if(e.code==='KeyA'){ for(const u of state.units) u.selected=(u.side==='blue'); } else if(e.code==='Space'){ state.paused=!state.paused; } else if(e.code==='KeyR'){ restart(); } });
+
+      restartBtn.addEventListener('click',()=>restart()); playAgain.addEventListener('click',()=>restart());
+      function restart(){ overlay.classList.remove('show'); resizeCanvasToWindow(); state=createGame(); // show start
+        startOverlay.classList.remove('hidden'); countdownEl.textContent=''; }
+
+      // Start flow with countdown and combat lock
+      startBtn.addEventListener('click', ()=>{
+        if(!state) return; let remaining=5; countdownEl.textContent=String(remaining);
+        state.countdownActive=true; state.allowCombat=false; startBtn.disabled=true;
+        const id=setInterval(()=>{
+          remaining--; if(remaining>0){ countdownEl.textContent=String(remaining); }
+          else { clearInterval(id); countdownEl.textContent='Go!'; setTimeout(()=>{ startOverlay.classList.add('hidden'); state.countdownActive=false; state.allowCombat=true; countdownEl.textContent=''; startBtn.disabled=false; }, 400); }
+        }, 1000);
+      });
+
+      // AI
+      function aiUpdate(){
+        if(!state.allowCombat) return;
+        const t=nowSec(); if(t-state.lastPlanAt.red<CONFIG.ai.planEverySeconds) return; state.lastPlanAt.red=t;
+        const redUnits=state.units.filter(u=>u.side==='red'); if(!redUnits.length) return;
+        const redCities=state.cities.filter(c=>c.side==='red');
+        const blueCities=state.cities.filter(c=>c.side==='blue'); if(!blueCities.length) return;
+
+        // Assess threats near red cities
+        const threatened = redCities.filter(c=>{
+          const enemiesNear = getUnitsInRadius(c.x, c.y, CONFIG.ai.defenseRadius).some(u=>u.side==='blue');
+          return enemiesNear;
+        });
+
+        // Create a pool of idle/available units
+        const idle = redUnits.filter(u=>!u.path || u.pathIndex>=u.path.length || Math.random()<0.15);
+
+        if(threatened.length){
+          // Assign defenders to threatened cities
+          for(const city of threatened){
+            const needed = CONFIG.ai.garrisonSize;
+            const defenders = idle.splice(0, needed);
+            for(const u of defenders){ const jitter=()=> (Math.random()-0.5)*40; u.setTarget(city.x+jitter(), city.y+jitter(), state.map); }
+          }
+        }
+
+        // Remaining units form attack groups aimed at nearest blue cities (prefer capital if exists)
+        const capitals = blueCities.filter(c=>c.isCapital);
+        const attackTarget = capitals[0] || blueCities[Math.floor(Math.random()*blueCities.length)];
+        const groupSize = CONFIG.ai.attackGroupSize;
+        for(let i=0; i<idle.length; i+=groupSize){
+          const group = idle.slice(i, i+groupSize);
+          if(group.length===0) break;
+          const spread = 70;
+          for(const u of group){ const jitter=()=> (Math.random()-0.5)*spread; u.setTarget(attackTarget.x+jitter(), attackTarget.y+jitter(), state.map); }
+        }
+      }
+
+      // Combat and collisions: units stop when close to enemies
+      function resolveCombatAndCollisions(dt){
+        // Reset lock flags
+        for(const u of state.units){ u.lockedForCombat=false; u.engaged=false; }
+        rebuildSpatial();
+        const engageRadius=CONFIG.engageRadius; // where damage starts
+        for(const u of state.units){
+          // Nearby search once per unit
+          const neighbors=getUnitsInRadius(u.x,u.y,engageRadius+8);
+          const enemies=neighbors.filter(n=>n.side!==u.side);
+          // During countdown, collisions only (no combat lock)
+          if(state.allowCombat){
+            if(enemies.length){
+              u.lockedForCombat=true; u.engaged=true;
+            }
+          }
+          const friends=neighbors.filter(n=>n.side===u.side);
+          // Damage taken scales with local numbers, flanking/encirclement, city distance, plus terrain effects
+          if(state.allowCombat && enemies.length){
+            const friendlyCount=Math.max(1, friends.length);
+            const enemyCount=Math.max(1, enemies.length);
+            // Estimate directional flanks by sampling enemy bearings
+            let left=0,right=0,up=0,down=0; for(const e of enemies){ const dx=e.x-u.x, dy=e.y-u.y; if(Math.abs(dx)>Math.abs(dy)){ if(dx<0) left++; else right++; } else { if(dy<0) up++; else down++; } }
+            const flankDirs = [left>0,right>0,up>0,down>0].filter(Boolean).length; // 1..4
+            const flankMultiplier = 1 + (flankDirs-1)*0.35; // +35% per extra side
+            const outnumberedMultiplier = enemyCount / friendlyCount;
+            const typeMod = (u.isTank?0.8:1);
+            // Terrain damage taken modifier
+            const cell=worldToCell(u.x,u.y); const tt=tileAt(state.map,cell.c,cell.r); const terrMod = tt ? (CONFIG.terrain[tt.terrain].damageTakenMultiplier || 1) : 1;
+            // Distance from nearest friendly city reduces outgoing damage (logistic falloff)
+            function nearestFriendlyCityMultiplier(unit){
+              let best=Infinity; for(const ci of state.cities){ if(ci.side!==unit.side) continue; const d=Math.hypot(ci.x-unit.x, ci.y-unit.y); if(d<best) best=d; }
+              const fall=CONFIG.cityDamageFalloffPx; const min=CONFIG.cityDamageMinMultiplier; if(!isFinite(best)) return min; const t=best/fall; const k=1/(1+Math.exp(4*(t-1))); // sigmoid centered at falloff distance
+              return clamp(min + (1-min)*k, min, 1);
+            }
+            const cityMult = nearestFriendlyCityMultiplier(u);
+            const totalDps=enemies.reduce((s,e)=>s+e.dps,0) * typeMod * outnumberedMultiplier * flankMultiplier * terrMod * cityMult;
+            u.hp -= totalDps*dt*0.15;
+          }
+          // Physical collision with minimum navigable gap rule; softer friendly collision
+          for(const v of neighbors){ if(v===u) continue; const dx=u.x-v.x, dy=u.y-v.y; const d=Math.hypot(dx,dy); const minGap=(u.radius+v.radius)*CONFIG.minGapFactor; const minDist=u.radius+v.radius; if(d>0 && d<minDist){ const overlap=minDist-d; const nx=dx/d, ny=dy/d; const softness = (v.side===u.side) ? 0.25 : 0.55; const push=overlap*softness; u.x+=nx*push; u.y+=ny*push; v.x-=nx*push; v.y-=ny*push; }
+            // When navigating between two friendlies, block if corridor narrower than minGap
+            // Approximate by checking another neighbor forming a corridor
+            if(d>0 && d < minGap){
+              // Treat as blocking by marking both as locked for combat, preventing squeeze-through
+              if(v.side !== u.side) { u.lockedForCombat = true; v.lockedForCombat = true; }
+            }
+          }
+        }
+        // Cleanup dead
+        state.units = state.units.filter(u=>u.hp>0);
+      }
+
+      function drawMap(map){ for(let r=0;r<map.rows;r++){ for(let c=0;c<map.cols;c++){ const t=tileAt(map,c,r); ctx.fillStyle=CONFIG.terrain[t.terrain].color; ctx.fillRect(c*TILE_W,r*TILE_H,TILE_W,TILE_H); const tint=t.owner==='blue'?'rgba(60,150,255,0.10)':'rgba(255,100,100,0.10)'; ctx.fillStyle=tint; ctx.fillRect(c*TILE_W,r*TILE_H,TILE_W,TILE_H); } }
+        drawSmoothBorders(map); }
+
+      // Marching squares based smooth border drawing
+      function drawSmoothBorders(map){
+        const cols=map.cols, rows=map.rows;
+        function val(c,r){ const t=tileAt(map,c,r); if(!t) return 0; return t.control || (t.owner==='blue'?1:-1); }
+        function lerp(a,b){ if(a===b) return 0.5; const t = (0 - a)/(b - a); return isFinite(t)? t : 0.5; }
+        const segments=[];
+        for(let r=0;r<rows-1;r++){
+          for(let c=0;c<cols-1;c++){
+            const v00=val(c,r), v10=val(c+1,r), v11=val(c+1,r+1), v01=val(c,r+1);
+            const signDiff=(a,b)=> (a>0)!==(b>0);
+            const points=[]; // in order: top,right,bottom,left
+            if(signDiff(v00,v10)){
+              const t=lerp(v00,v10); const x=(c+0.5 + t)*TILE_W, y=(r+0.5)*TILE_H; points.push({x,y,edge:'top'});
+            }
+            if(signDiff(v10,v11)){
+              const t=lerp(v10,v11); const x=(c+1+0.5)*TILE_W, y=(r+0.5 + t)*TILE_H; points.push({x,y,edge:'right'});
+            }
+            if(signDiff(v11,v01)){
+              const t=lerp(v11,v01); const x=(c+0.5 + t)*TILE_W, y=(r+1+0.5)*TILE_H; points.push({x,y,edge:'bottom'});
+            }
+            if(signDiff(v01,v00)){
+              const t=lerp(v01,v00); const x=(c+0.5)*TILE_W, y=(r+0.5 + t)*TILE_H; points.push({x,y,edge:'left'});
+            }
+            if(points.length===2){ segments.push([points[0], points[1]]); }
+            else if(points.length===4){
+              const center=(v00+v10+v11+v01)/4;
+              if(center>0){ segments.push([points[0], points[3]]); segments.push([points[1], points[2]]); }
+              else { segments.push([points[0], points[1]]); segments.push([points[2], points[3]]); }
+            }
+          }
+        }
+        if(!segments.length) return;
+        ctx.save();
+        ctx.strokeStyle=CONFIG.borders.color;
+        ctx.lineWidth=CONFIG.borders.width;
+        ctx.lineJoin='round'; ctx.lineCap='round';
+        ctx.beginPath();
+        for(const seg of segments){ ctx.moveTo(seg[0].x, seg[0].y); ctx.lineTo(seg[1].x, seg[1].y); }
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Flood-fill encirclement conversion: converts isolated enemy regions with no enemies inside
+      let lastEncirclementCheck = 0;
+      function checkEncirclements(){
+        const t=nowSec(); if(t - lastEncirclementCheck < CONFIG.encirclementCheckSeconds) return; lastEncirclementCheck = t;
+        const map = state.map; const cols=map.cols, rows=map.rows; const visited=new Uint8Array(cols*rows);
+        function idx(c,r){return r*cols+c;}
+        function regionAt(c0,r0){
+          const start=tileAt(map,c0,r0); if(!start) return null; const targetOwner=start.owner; const q=[[c0,r0]]; const cells=[]; let touchesEdge=false; let hasEnemyUnit=false;
+          visited[idx(c0,r0)]=1;
+          while(q.length){ const [c,r]=q.pop(); const t=tileAt(map,c,r); cells.push([c,r]); if(c===0||r===0||c===cols-1||r===rows-1) touchesEdge=true;
+            // detect units of opposite side inside
+            const center=cellCenter(c,r); const near=getUnitsInRadius(center.x, center.y, TILE_W*0.8);
+            if(near.some(u=> (t.owner==='blue'? u.side==='blue': u.side==='red'))) hasEnemyUnit=true;
+            const dirs=[[1,0],[-1,0],[0,1],[0,-1]]; for(const [dc,dr] of dirs){ const nc=c+dc, nr=r+dr; if(nc<0||nr<0||nc>=cols||nr>=rows) continue; const nt=tileAt(map,nc,nr); if(!nt||visited[idx(nc,nr)]) continue; if(nt.owner===targetOwner){ visited[idx(nc,nr)]=1; q.push([nc,nr]); }
+            }
+          }
+          return { cells, touchesEdge, hasEnemyUnit, owner: targetOwner };
+        }
+        for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
+          const i=idx(c,r); if(visited[i]) continue; const t0=tileAt(map,c,r); if(!t0) continue; const reg=regionAt(c,r); if(!reg) continue;
+          // If region is enemy-owned and enclosed by our ownership boundary, convert when no enemy units inside
+          const our='blue', theirs='red';
+          for(const perspective of [['blue','red'],['red','blue']]){
+            const ours=perspective[0], theirs=perspective[1];
+            if(reg.owner!==theirs) continue; // not enemy region
+            // touching the edge means it's connected to the rest of territory
+            if(reg.touchesEdge) continue;
+            if(reg.hasEnemyUnit) continue; // enemy present blocks conversion
+            // Convert region to our side
+            for(const [c2,r2] of reg.cells){ const tt=tileAt(map,c2,r2); tt.owner=ours; tt.control=(ours==='blue'?1:-1)*CONFIG.tileControlThreshold; }
+          }
+        }
+      }
+
+      let lastTime=performance.now();
+      function update(){ const now=performance.now(); let dt=(now-lastTime)/1000; lastTime=now; dt=Math.min(dt,0.05); if(!state.paused && !state.winner){
+          // Resolve combat/collisions first so units stop before moving
+          resolveCombatAndCollisions(dt);
+          // Cities
+          for(const city of state.cities) city.update(dt,state.map);
+          // Units move/capture
+          for(const u of state.units) u.update(dt,state.map);
+          // AI
+          aiUpdate();
+          // Encirclement auto-conversion
+          checkEncirclements();
+          // Victory check
+          const blueCap=state.cities.find(c=>c.isCapital && c.side==='blue');
+          const redCap=state.cities.find(c=>c.isCapital && c.side==='red');
+          if(!blueCap) state.winner='red';
+          if(!redCap) state.winner='blue';
+        } }
+
+      function draw(){ ctx.clearRect(0,0,canvas.width,canvas.height); drawMap(state.map); for(const c of state.cities) c.draw(ctx); 
+        // Draw paths for selected units (smoothed with quadratic curve)
+        const selectedUnits = state.units.filter(u=>u.selected && u.path && u.path.length>u.pathIndex);
+        if(selectedUnits.length){
+          ctx.save();
+          ctx.lineWidth = 2.5;
+          ctx.setLineDash([]);
+          ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+          ctx.shadowColor = 'rgba(0,0,0,0.5)';
+          ctx.shadowBlur = 2;
+          for(const u of selectedUnits){
+            const pts=[]; pts.push({x:u.x,y:u.y}); for(let i=u.pathIndex; i<u.path.length; i++){ const n=u.path[i]; const p=cellCenter(n.c,n.r); pts.push(p); }
+            if(pts.length>=2){
+              ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+              for(let i=1;i<pts.length-1;i++){
+                const midX=(pts[i].x+pts[i+1].x)/2, midY=(pts[i].y+pts[i+1].y)/2; ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
+              }
+              ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
+              ctx.stroke();
+              // Arrowhead at end
+              const a=pts[pts.length-2], b=pts[pts.length-1]; const ang=Math.atan2(b.y-a.y,b.x-a.x); const len=12;
+              ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x - Math.cos(ang-0.5)*len, b.y - Math.sin(ang-0.5)*len); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x - Math.cos(ang+0.5)*len, b.y - Math.sin(ang+0.5)*len); ctx.stroke();
+            }
+          }
+          ctx.restore();
+        }
+        // Show temporary right-drag stroke when building a path
+        if(rdrag && rdrag.active && rdrag.points.length>1){
+          ctx.save(); ctx.strokeStyle='rgba(255,255,255,0.5)'; ctx.lineWidth=2; ctx.setLineDash([6,6]); ctx.beginPath(); ctx.moveTo(rdrag.points[0].x, rdrag.points[0].y); for(let i=1;i<rdrag.points.length;i++){ ctx.lineTo(rdrag.points[i].x, rdrag.points[i].y); } ctx.stroke(); ctx.restore();
+        }
+        for(const u of state.units) u.draw(ctx); if(drag){ const x=Math.min(drag.x0,drag.x1), y=Math.min(drag.y0,drag.y1); const w=Math.abs(drag.x1-drag.x0), h=Math.abs(drag.y1-drag.y0); ctx.fillStyle='rgba(255,255,255,0.08)'; ctx.fillRect(x,y,w,h); ctx.strokeStyle=CONFIG.selectionColor; ctx.lineWidth=1.2; ctx.strokeRect(x,y,w,h); }
+        const bu=state.units.filter(u=>u.side==='blue').length; const ru=state.units.filter(u=>u.side==='red').length; const time=Math.floor(nowSec()-state.startedAt); hudText.textContent=`Time ${time}s | Blue units ${bu} | Red units ${ru}`; if(state.winner){ overlay.classList.add('show'); const msg=state.winner==='blue'?'Victory':'Defeat'; resultTitle.textContent=msg; resultSubtitle.textContent=state.winner==='blue'?'You captured the enemy capital.':'Your capital was captured.'; } }
+
+      function loop(){ update(); draw(); requestAnimationFrame(loop); }
+
+      resizeCanvasToWindow(); state=createGame(); // Wait for player to press Start
+      // keep drawing idle scene
+      loop();
+    </script>
+  </body>
+</html>
+
+
