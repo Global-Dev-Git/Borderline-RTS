@@ -53,6 +53,12 @@
       #countdown { font-size: 42px; margin-top: 8px; letter-spacing: 1px; }
       .diffRow { margin:8px 0; }
       .ml10 { margin-left:10px; }
+      /* Editor UI tweaks */
+      #ui select, #ui input[type="range"] { margin-left: 6px; }
+      #ui label { margin-right: 8px; }
+      #ui .group { margin-top: 6px; }
+      #ui .danger { background:#8b2a2a; }
+      #ui .ghost { background:#333; }
     </style>
   </head>
   <body>
@@ -61,12 +67,58 @@
       <div class="panel" id="hudPanel"><div id="hudText">Loading…</div></div>
       <div class="panel"><button id="restartBtn" title="Restart (R)">Restart</button></div>
       <div class="panel" title="Tips">LMB drag to select • Right-click to move • A=Select all • Space=Pause</div>
+      <div class="panel" id="editorPanel">
+        <button id="editorToggle" title="Toggle editor (E)">Editor</button>
+        <button id="editorPlayBtn" class="ghost" title="Open Start to Play">Play</button>
+        <button id="editorSaveBtn" title="Save scenario to file">Save</button>
+        <button id="editorLoadBtn" title="Load scenario from file">Load</button>
+        <input id="editorFileInput" type="file" accept=".json" style="display:none" />
+      </div>
+      <div class="panel" id="editorControls" style="display:none; max-width: 58vw;">
+        <div class="group">
+          <strong>Tool</strong>:
+          <label><input type="radio" name="tool" value="terrain" checked> Terrain</label>
+          <label><input type="radio" name="tool" value="owner"> Owner</label>
+          <label><input type="radio" name="tool" value="city"> City</label>
+          <label><input type="radio" name="tool" value="unit"> Unit</label>
+          <label><input type="radio" name="tool" value="eraser"> Eraser</label>
+        </div>
+        <div class="group" id="toolTerrain">
+          <strong>Terrain</strong>:
+          <select id="terrainSelect"></select>
+          <label class="ml10">Brush <input id="brushSize" type="range" min="1" max="8" value="2"></label>
+        </div>
+        <div class="group" id="toolOwner" style="display:none;">
+          <strong>Owner</strong>:
+          <label><input type="radio" name="ownerSide" value="blue" checked> Blue</label>
+          <label><input type="radio" name="ownerSide" value="red"> Red</label>
+          <label class="ml10">Brush <input id="ownerBrushSize" type="range" min="1" max="8" value="2"></label>
+        </div>
+        <div class="group" id="toolCity" style="display:none;">
+          <strong>City</strong>:
+          <label><input type="radio" name="citySide" value="blue" checked> Blue</label>
+          <label><input type="radio" name="citySide" value="red"> Red</label>
+          <label class="ml10"><input type="checkbox" id="cityIsCapital"> Capital</label>
+          <span class="ml10" style="color:#ccc">Left-click to place, Right-click to remove</span>
+        </div>
+        <div class="group" id="toolUnit" style="display:none;">
+          <strong>Unit</strong>:
+          <label><input type="radio" name="unitSide" value="blue" checked> Blue</label>
+          <label><input type="radio" name="unitSide" value="red"> Red</label>
+          <label class="ml10"><input type="checkbox" id="unitIsTank"> Tank</label>
+          <span class="ml10" style="color:#ccc">Left-click to place, Right-click to remove</span>
+        </div>
+        <div class="group">
+          <button id="editorGenNoiseBtn" class="ghost" title="Regenerate map from noise">New Random Map</button>
+          <button id="editorClearBtn" class="danger" title="Set all to plains and reset ownership">Clear</button>
+        </div>
+      </div>
     </div>
     <div id="overlay"><div class="card"><h1 id="resultTitle"></h1><p id="resultSubtitle"></p><button id="playAgain">Play again</button></div></div>
     <div id="startOverlay">
       <div class="card">
         <h1>Borderline RTS</h1>
-        <p>Select difficulty and AI behavior.</p>
+        <p>Select difficulty, AI behavior, and speed.</p>
         <div class="diffRow">
           <label><input type="radio" name="diff" value="veryeasy"> Very Easy</label>
           <label class="ml10"><input type="radio" name="diff" value="slightlyeasy"> Slightly Easy</label>
@@ -75,6 +127,15 @@
           <label class="ml10"><input type="radio" name="diff" value="slightlyhard"> Slightly Hard</label>
           <label class="ml10"><input type="radio" name="diff" value="hard"> Hard</label>
           <label class="ml10"><input type="radio" name="diff" value="veryhard"> Very Hard</label>
+        </div>
+        <div class="diffRow">
+          <label><input type="radio" name="speed" value="veryslow"> Speed: Very Slow</label>
+          <label class="ml10"><input type="radio" name="speed" value="slow"> Slow</label>
+          <label class="ml10"><input type="radio" name="speed" value="default" checked> Default (Slow)</label>
+          <label class="ml10"><input type="radio" name="speed" value="normal"> Normal</label>
+          <label class="ml10"><input type="radio" name="speed" value="slightlyfast"> Slightly Fast</label>
+          <label class="ml10"><input type="radio" name="speed" value="fast"> Fast</label>
+          <label class="ml10"><input type="radio" name="speed" value="veryfast"> Very Fast</label>
         </div>
         <div class="diffRow">
           <label><input type="radio" name="agg" value="veryaggressive"> Very Aggressive</label>
@@ -110,6 +171,7 @@
           </div>
         </div>
         <button id="startBtn">Start</button>
+        <button id="openEditorBtn" class="ml10">Open Editor</button>
         <div id="countdown"></div>
       </div>
     </div>
@@ -139,15 +201,11 @@
           savannah: { color: '#cdbb6e', move: 1.3, damageTakenMultiplier: 1.0,   healPerSecond: 0.0,  navalMove: Infinity },
           hills:    { color: '#caa17c', move: 3.0, damageTakenMultiplier: 0.95,  healPerSecond: 0.0,  navalMove: Infinity },
           mountain: { color: '#6b6b6b', move: 5.0, damageTakenMultiplier: 0.7,  healPerSecond: 0.0, navalMove: Infinity },
-          river:    { color: '#2a76db', move: 3.0, damageTakenMultiplier: 1.2,   healPerSecond: -2.0, navalMove: 1.0 },
-          lake:     { color: '#1f5fb7', move: Infinity, damageTakenMultiplier: 1.0, healPerSecond: 0.0, navalMove: 1.2 },
-          ocean:    { color: '#174b9e', move: Infinity, damageTakenMultiplier: 1.0, healPerSecond: 0.0, navalMove: 1.5 },
-          water:    { color: '#3ab0c2', move: Infinity, damageTakenMultiplier: 1.05,  healPerSecond: 0.0, navalMove: 1.1 },
+          river:    { color: '#2a76db', move: 5.0, damageTakenMultiplier: 1.2,   healPerSecond: -2.0, navalMove: 1.0 },
+          lake:     { color: '#1f5fb7', move: Infinity, damageTakenMultiplier: 1.2, healPerSecond: -2.0, navalMove: 1.2 },
+          ocean:    { color: '#174b9e', move: Infinity, damageTakenMultiplier: 1.2, healPerSecond: -2.0, navalMove: 1.5 },
+          water:    { color: '#3ab0c2', move: Infinity, damageTakenMultiplier: 1.2,  healPerSecond: -2.0, navalMove: 1.1 },
           snow:     { color: '#e7f4ff', move: 1.9, damageTakenMultiplier: 0.9,   healPerSecond: 0.5,  navalMove: Infinity },
-        },
-        navalUnits: {
-          battleship: { radius: 8, baseSpeed: 36, hp: 260, dps: 30 },
-          transporter: { radius: 8, baseSpeed: 40, hp: 180, dps: 8, cargo: 5 },
         },
         difficultyPresets: {
           veryeasy:    { spawnIntervalMult: 2.4, aiDamageMult: 0.55, aiSpeedMult: 0.85, aiHpMult: 0.75, aiPlanFactor: 1.35 },
@@ -170,7 +228,7 @@
         borders: { color: '#0e0e1a', width: 3.5 },
         // Slower than last edit but still faster than original (30s/25s)
         spawn: { citySeconds: 28, capitalSeconds: 20 },
-        ai: { planEverySeconds: 5, groupRadius: 80, defenseRadius: 160, garrisonSize: 3, attackGroupSize: 10 },
+        ai: { planEverySeconds: 1, groupRadius: 80, defenseRadius: 160, garrisonSize: 3, attackGroupSize: 10 },
         frontline: { rowStep: 4, jitter: 6, unitsPerSidePerRow: 1 },
         controls: { retreatGrace: 2.0 },
         pathVis: { width: 2, color: 'rgba(255,255,255,0.8)', dash: [6,4] },
@@ -184,7 +242,20 @@
         cityDamageFalloffPx: 1200,
         friendlyCrowdSlowPerUnit: 0.35,
           friendlyCrowdRadius: 14,
-        formation: { advanceSpeed: 24, retargetPx: 22 }
+        formation: { advanceSpeed: 24, retargetPx: 22 },
+        infantryWaterMove: 15.0,
+        // New pacing controls
+        defaultTimeScale: 0.6,
+        speedPresets: {
+          veryslow: 0.4,
+          slow: 0.5,
+          default: 0.6,
+          normal: 1.0,
+          slightlyfast: 1.25,
+          fast: 1.5,
+          veryfast: 2.0
+        },
+        combatPush: { maxPxPerSec: 28 }
       };
 
       const canvas = document.getElementById('game');
@@ -198,8 +269,26 @@
       const startOverlay = document.getElementById('startOverlay');
       const startBtn = document.getElementById('startBtn');
       const countdownEl = document.getElementById('countdown');
+      const editorPanel = document.getElementById('editorPanel');
+      const editorControls = document.getElementById('editorControls');
+      const editorToggle = document.getElementById('editorToggle');
+      const editorPlayBtn = document.getElementById('editorPlayBtn');
+      const editorSaveBtn = document.getElementById('editorSaveBtn');
+      const editorLoadBtn = document.getElementById('editorLoadBtn');
+      const editorFileInput = document.getElementById('editorFileInput');
+      const terrainSelect = document.getElementById('terrainSelect');
+      const brushSizeInput = document.getElementById('brushSize');
+      const ownerBrushInput = document.getElementById('ownerBrushSize');
+      const cityIsCapitalChk = document.getElementById('cityIsCapital');
+      const unitIsTankChk = document.getElementById('unitIsTank');
+      const editorGenNoiseBtn = document.getElementById('editorGenNoiseBtn');
+      const editorClearBtn = document.getElementById('editorClearBtn');
+      const openEditorBtn = document.getElementById('openEditorBtn');
+      let editor = { mode:false, tool:'terrain', terrain:'plains', brush:2, owner:'blue', ownerBrush:2, city:{ side:'blue', capital:false }, unit:{ side:'blue', tank:false }, dragging:false, scenario:null };
+      function updateUIVisibility(){ const ui=document.getElementById('ui'); if(!ui) return; ui.style.display = (editor && editor.mode) ? 'flex' : ((state && state.paused) ? 'flex' : 'none'); }
       function getSelectedDifficulty(){ const radios=document.querySelectorAll('input[name="diff"]'); for(const r of radios){ if(r.checked) return r.value; } return 'normal'; }
       function getSelectedAggression(){ const radios=document.querySelectorAll('input[name="agg"]'); for(const r of radios){ if(r.checked) return r.value; } return 'balanced'; }
+      function getSelectedSpeed(){ const radios=document.querySelectorAll('input[name="speed"]'); for(const r of radios){ if(r.checked) return r.value; } return 'default'; }
       function getSpectate(){ const el=document.getElementById('spectateChk'); return !!(el && el.checked); }
       function getSelectedDifficultyBlue(){ const radios=document.querySelectorAll('input[name="diffBlue"]'); for(const r of radios){ if(r.checked) return r.value; } return 'normal'; }
       function getSelectedAggressionBlue(){ const radios=document.querySelectorAll('input[name="aggBlue"]'); for(const r of radios){ if(r.checked) return r.value; } return 'balanced'; }
@@ -207,10 +296,17 @@
       function resizeCanvasToWindow() {
         canvas.width = Math.floor(window.innerWidth);
         canvas.height = Math.floor(window.innerHeight);
-        CONFIG.mapCols = Math.max(80, Math.floor(canvas.width / CONFIG.tileSize));
-        CONFIG.mapRows = Math.max(45, Math.floor(canvas.height / CONFIG.tileSize));
+        if(state && state.map){
+          CONFIG.mapCols = state.map.cols;
+          CONFIG.mapRows = state.map.rows;
+        } else {
+          CONFIG.mapCols = Math.max(80, Math.floor(canvas.width / CONFIG.tileSize));
+          CONFIG.mapRows = Math.max(45, Math.floor(canvas.height / CONFIG.tileSize));
+        }
         TILE_W = Math.floor(canvas.width / CONFIG.mapCols);
         TILE_H = Math.floor(canvas.height / CONFIG.mapRows);
+        // Invalidate cached render layers on resize
+        if (state) { state.terrainCanvas = null; state.ownerTintCanvas = null; state._borderSegments = null; }
       }
       window.addEventListener('resize', () => { resizeCanvasToWindow(); if (state) draw(0); });
       let TILE_W = CONFIG.tileSize, TILE_H = CONFIG.tileSize;
@@ -314,12 +410,24 @@
         // Enforce presence: carve oceans and rivers when compatible and scarce
         function count(type){ let ct=0; for(const t of grid) if(t.terrain===type) ct++; return ct; }
         function setTerrain(c,r,type){ if(c<0||r<0||c>=cols||r>=rows) return; grid[r*cols+c].terrain=type; }
-        // Ensure ocean coastline if allowed
+        // Ensure ocean coastline if allowed (wavy/noisy coastline instead of straight bar)
         if(compat[mainTerrain].includes('ocean') && count('ocean') < cols*rows*0.03){
-          const side = rng.next()<0.5 ? 0 : cols-1;
-          const width = Math.max(4, Math.floor(cols*0.1 + rng.range(0, cols*0.08)));
-          if(side===0){ for(let r=0;r<rows;r++) for(let c=0;c<width;c++) setTerrain(c,r,'ocean'); }
-          else { for(let r=0;r<rows;r++) for(let c=cols-width;c<cols;c++) setTerrain(c,r,'ocean'); }
+          const sideLeft = rng.next() < 0.5;
+          const base = Math.max(2, Math.floor(cols * 0.03 + rng.range(0, cols*0.03)));
+          const maxWidth = Math.max(base+2, Math.floor(cols * 0.14));
+          const amp = Math.max(2, Math.floor(cols * 0.02 + rng.range(0, cols*0.03)));
+          const period = rng.range(rows*0.35, rows*0.8);
+          const k = (Math.PI*2)/period;
+          const phi = rng.range(0, Math.PI*2);
+          const coastSeed = noiseSeed + 777;
+          for(let r=0;r<rows;r++){
+            const sTerm = Math.sin(k*r + phi);
+            const nTerm = fbm(0, r, Math.max(cols,rows)*0.35, 3, 0.55, 2.05, coastSeed) * 2 - 1; // [-1,1]
+            let w = Math.floor(base + amp * (0.6*sTerm + 0.4*nTerm));
+            w = clamp(w, 2, maxWidth);
+            if(sideLeft){ for(let c=0;c<w;c++) setTerrain(c,r,'ocean'); }
+            else { for(let c=cols-w;c<cols;c++) setTerrain(c,r,'ocean'); }
+          }
         }
         // Carve rivers if allowed and none detected
         function carveRiver(startC){
@@ -417,33 +525,65 @@
         return {cols, rows, tiles:grid};
       }
       function tileAt(map,c,r){ if(c<0||r<0||c>=map.cols||r>=map.rows) return null; return map.tiles[r*map.cols+c]; }
-      function worldToCell(x,y){ return { c: clamp(Math.floor(x/TILE_W),0,CONFIG.mapCols-1), r: clamp(Math.floor(y/TILE_H),0,CONFIG.mapRows-1) }; }
+      function worldToCell(x,y){
+        const cols = (state && state.map ? state.map.cols : CONFIG.mapCols);
+        const rows = (state && state.map ? state.map.rows : CONFIG.mapRows);
+        return { c: clamp(Math.floor(x/TILE_W),0,cols-1), r: clamp(Math.floor(y/TILE_H),0,rows-1) };
+      }
       function cellCenter(c,r){ return { x: (c+0.5)*TILE_W, y: (r+0.5)*TILE_H }; }
+
+      // Pathfinding context (used to allow infantry to cross water extremely slowly and choose direct routing)
+      let PATHFINDING_CONTEXT = { isTank: false, prefersDirect: false };
 
       // A* on grid (supports naval)
       function findPath(map, startC,startR,endC,endR, isNaval=false){
         const cols=map.cols, rows=map.rows; const start=startR*cols+startC; const goal=endR*cols+endC;
-        const closed=new Uint8Array(cols*rows); const g=new Float32Array(cols*rows); const f=new Float32Array(cols*rows); const came=new Int32Array(cols*rows); came.fill(-1); for(let i=0;i<g.length;i++){g[i]=Infinity; f[i]=Infinity;} g[start]=0;
+        const closed=new Uint8Array(cols*rows); const g=new Float32Array(cols*rows); const f=new Float32Array(cols*rows); const came=new Int32Array(cols*rows); const inOpen=new Uint8Array(cols*rows);
+        came.fill(-1); for(let i=0;i<g.length;i++){g[i]=Infinity; f[i]=Infinity;}
+        g[start]=0;
         const h=(i)=>{const c=i%cols, r=(i/cols)|0; return Math.abs(c-endC)+Math.abs(r-endR);} ; f[start]=h(start);
-        const open=[start]; const up=(i)=>{while(i>0){const p=(i-1)>>1; if(f[open[p]]<=f[open[i]]) break; [open[p],open[i]]=[open[i],open[p]]; i=p;}}; const down=(i)=>{for(;;){let l=(i<<1)+1, r=l+1, s=i; if(l<open.length && f[open[l]]<f[open[s]]) s=l; if(r<open.length && f[open[r]]<f[open[s]]) s=r; if(s===i) break; [open[s],open[i]]=[open[i],open[s]]; i=s;}}; const push=(n)=>{open.push(n); up(open.length-1);} ; const pop=()=>{const t=open[0]; const last=open.pop(); if(open.length){open[0]=last; down(0);} return t;};
+        const open=[start]; inOpen[start]=1;
+        const up=(i)=>{while(i>0){const p=(i-1)>>1; if(f[open[p]]<=f[open[i]]) break; [open[p],open[i]]=[open[i],open[p]]; i=p;}};
+        const down=(i)=>{for(;;){let l=(i<<1)+1, r=l+1, s=i; if(l<open.length && f[open[l]]<f[open[s]]) s=l; if(r<open.length && f[open[r]]<f[open[s]]) s=r; if(s===i) break; [open[s],open[i]]=[open[i],open[s]]; i=s;}};
+        const push=(n)=>{open.push(n); inOpen[n]=1; up(open.length-1);} ;
+        const pop=()=>{const t=open[0]; const last=open.pop(); if(open.length){open[0]=last; down(0);} inOpen[t]=0; return t;};
         const passableCell=(c,r)=>{
           const t=tileAt(map,c,r); if(!t) return false;
           if(isNaval) return CONFIG.terrain[t.terrain].navalMove !== Infinity;
-          return CONFIG.terrain[t.terrain].move!==Infinity;
+          if(CONFIG.terrain[t.terrain].move!==Infinity){
+            // If preferring direct routes, mildly penalize entering slower tiles instead of optimizing speed
+            return true;
+          }
+          // Allow infantry (non-tank) to cross water tiles
+          if(!PATHFINDING_CONTEXT.isTank && (t.terrain==='ocean' || t.terrain==='lake' || t.terrain==='water')) return true;
+          return false;
         };
-        const moveCost=(fc,fr,tc,tr)=>{const t=tileAt(map,tc,tr); const d=(fc!==tc && fr!==tr)?Math.SQRT2:1; return d*(isNaval?CONFIG.terrain[t.terrain].navalMove:CONFIG.terrain[t.terrain].move);};
+        const moveCost=(fc,fr,tc,tr)=>{
+          const t=tileAt(map,tc,tr);
+          const d=(fc!==tc && fr!==tr)?Math.SQRT2:1;
+          if(isNaval) return d*CONFIG.terrain[t.terrain].navalMove;
+          const mv = CONFIG.terrain[t.terrain].move;
+          if(mv!==Infinity){
+            // When preferring direct routes, ignore terrain speed; use geometric step cost only
+            if(PATHFINDING_CONTEXT.prefersDirect) return d;
+            return d*mv;
+          }
+          // Infantry water crossing: extremely slow on ocean/lake/water
+          if(!PATHFINDING_CONTEXT.isTank && (t.terrain==='ocean' || t.terrain==='lake' || t.terrain==='water')) return d*CONFIG.infantryWaterMove;
+          return Infinity;
+        };
         while(open.length){
           const cur=pop(); if(cur===goal){ const path=[]; let p=cur; while(p!==start){ path.push({c:p%cols, r:(p/cols)|0}); p=came[p]; } path.push({c:startC,r:startR}); path.reverse(); return path; }
           closed[cur]=1; const cc=cur%cols, rr=(cur/cols)|0;
           for(let dr=-1; dr<=1; dr++) for(let dc=-1; dc<=1; dc++){
-            if(!dc && !dr) continue; const nc=cc+dc, nr=rr+dr; if(!passableCell(nc,nr)) continue; const ni=nr*cols+nc; if(closed[ni]) continue; const tg=g[cur]+moveCost(cc,rr,nc,nr); if(tg<g[ni]){came[ni]=cur; g[ni]=tg; f[ni]=tg+h(ni); if(!open.includes(ni)) push(ni);} }
+            if(!dc && !dr) continue; const nc=cc+dc, nr=rr+dr; if(!passableCell(nc,nr)) continue; const ni=nr*cols+nc; if(closed[ni]) continue; const tg=g[cur]+moveCost(cc,rr,nc,nr); if(tg<g[ni]){came[ni]=cur; g[ni]=tg; f[ni]=tg+h(ni); if(!inOpen[ni]) push(ni);} }
         }
         return null;
       }
 
       class Unit{
         constructor(x,y,side,isTank=false){ this.x=x; this.y=y; this.side=side; this.isTank=isTank; const a=isTank?CONFIG.tankUnit:CONFIG.baseUnit; this.radius=a.radius; this.baseSpeed=a.baseSpeed; this.baseSpeedOriginal=this.baseSpeed; this.baseSpeedBaseline=this.baseSpeed; this.maxHp=a.hp; this.maxHpOriginal=this.maxHp; this.hp=this.maxHp; this.dps=a.dps; this.selected=false; this.path=null; this.pathIndex=0; this.target=null; this.engaged=false; this.lockedForCombat=false; this.retreatUntil=0; this.isRetreating=false; this.lastPos={x,y}; this.type='land'; }
-        setTarget(x,y,map){ this.target={x,y}; const s=worldToCell(this.x,this.y); const e=worldToCell(x,y); const path=findPath(map,s.c,s.r,e.c,e.r,false); this.path=path; this.pathIndex=0; this.retreatUntil = nowSec() + CONFIG.controls.retreatGrace; }
+        setTarget(x,y,map){ this.target={x,y}; const s=worldToCell(this.x,this.y); const e=worldToCell(x,y); PATHFINDING_CONTEXT.isTank = !!this.isTank; const path=findPath(map,s.c,s.r,e.c,e.r,false); this.path=path; this.pathIndex=0; this.retreatUntil = nowSec() + CONFIG.controls.retreatGrace; }
         update(dt,map){
           // Movement is skipped if locked in combat
           const canForceMove = nowSec() < this.retreatUntil; // potential retreat window
@@ -468,15 +608,21 @@
             if(nextCenter){ const toNextX = nextCenter.x - this.x; const toNextY = nextCenter.y - this.y; const lastMoveX = this.x - this.lastPos.x; const lastMoveY = this.y - this.lastPos.y; const dot = toNextX*lastMoveX + toNextY*lastMoveY; if(dot < 0) this.isRetreating = true; }
 
             // Only allow movement when corridor is clear (forward), or when retreating and corridor is clear behind
+            // Do not re-path or alter course once a player order has been given; follow current path until reached
             if(advancementAllowed || (canForceMove && this.isRetreating)){
             const node=this.path[this.pathIndex]; const {x:tx,y:ty}=cellCenter(node.c,node.r); const dx=tx-this.x, dy=ty-this.y; const d=Math.hypot(dx,dy);
-            const tile=tileAt(map,node.c,node.r); const slow=CONFIG.terrain[tile.terrain].move; const speed=slow===Infinity ? 0 : this.baseSpeed/slow; const step=speed*dt;
+            const tile=tileAt(map,node.c,node.r);
+            let moveDivisor=CONFIG.terrain[tile.terrain].move;
+            if(moveDivisor===Infinity && !this.isTank && (tile.terrain==='ocean' || tile.terrain==='lake' || tile.terrain==='water')){
+              moveDivisor = CONFIG.infantryWaterMove;
+            }
+            const speed = moveDivisor===Infinity ? 0 : this.baseSpeed / moveDivisor; const step=speed*dt;
             if(d<=step){ this.lastPos={x:this.x,y:this.y}; this.x=tx; this.y=ty; this.pathIndex++; if(this.pathIndex>=this.path.length){ this.path=null; this.pathIndex=0; } }
             else { this.lastPos={x:this.x,y:this.y}; this.x += (dx/d)*step; this.y += (dy/d)*step; }
             }
           }
-          // Formation persistence: if unit has a formation, continuously re-space along line
-          if(this.formation && (!this.path || this.path.length===0)){
+          // Formation persistence (only when explicitly marked persistent)
+          if(this.formation && this.formation.persistent && (!this.path || this.path.length===0)){
             const f=this.formation; const N=1; // per unit recompute own slot target
             const pts=f.points; if(pts && pts.length>1){
               const total=f.totalLength; const k=f.slotIndex+1; const d=(k/(f.slotIndexCount||0 || (pts.length))) * total; // fallback
@@ -498,7 +644,9 @@
               const tt = tileAt(map,c,r);
               if(!tt || CONFIG.terrain[tt.terrain].move === Infinity) continue;
               const center = cellCenter(c,r);
-              if(Math.hypot(center.x - this.x, center.y - this.y) > radiusPx + Math.max(TILE_W,TILE_H)*0.3) continue;
+              const maxDist = radiusPx + Math.max(TILE_W,TILE_H)*0.3;
+              const dx = center.x - this.x, dy = center.y - this.y;
+              if(dx*dx + dy*dy > maxDist*maxDist) continue;
               const nearby = getUnitsInRadius(center.x, center.y, CONFIG.captureBlockRadius);
               const enemyNearby = nearby.some(n => n.side !== this.side);
               if(!enemyNearby){ tt.control = (this.side==='blue' ? 1 : -1) * CONFIG.tileControlThreshold; }
@@ -533,20 +681,37 @@
             return others.some(o=>o.side!==u.side);
           });
           if(!hasCombatNearby){
-            this.spawnTimer+=dt; const interval=this.isHarbor ? (CONFIG.spawn.citySeconds*6) : (this.isCapital?CONFIG.spawn.capitalSeconds:CONFIG.spawn.citySeconds);
-            if(this.spawnTimer>=interval){ this.spawnTimer=0; if(this.isHarbor){ spawnNavalUnitNearHarbor(this); } else { spawnUnitNearCity(this); if(this.isCapital){ spawnUnitNearCity(this); } } }
+            this.spawnTimer+=dt;
+            const interval = this.isCapital ? CONFIG.spawn.capitalSeconds : CONFIG.spawn.citySeconds;
+            if(this.spawnTimer>=interval){
+              this.spawnTimer=0;
+              spawnUnitNearCity(this);
+              if(this.isCapital){ spawnUnitNearCity(this); }
+            }
           } else {
             this.spawnTimer = 0; // reset while under attack
           }
         }
-        draw(ctx){ const team=CONFIG.team[this.side]; ctx.beginPath(); ctx.arc(this.x,this.y,this.radius+8,0,Math.PI*2); ctx.fillStyle=this.isCapital?'rgba(255,215,64,0.12)':(this.isHarbor?'rgba(64,211,255,0.12)':'rgba(255,255,255,0.06)'); ctx.fill(); ctx.beginPath(); ctx.arc(this.x,this.y,this.radius,0,Math.PI*2); ctx.fillStyle=team.color; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=team.outline; ctx.stroke(); if(this.isCapital){ drawStar(ctx,this.x,this.y,5,this.radius*0.8,this.radius*0.4,'#ffd740'); } else if(this.isHarbor){ ctx.beginPath(); ctx.rect(this.x-5,this.y-5,10,10); ctx.strokeStyle='#40d3ff'; ctx.lineWidth=1.4; ctx.stroke(); } else { ctx.beginPath(); ctx.arc(this.x,this.y,3,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); } const pct=(this.control+CONFIG.cityCaptureThreshold)/(2*CONFIG.cityCaptureThreshold); ctx.beginPath(); ctx.lineWidth=3; ctx.strokeStyle=this.isHarbor?'#40d3ff':'#ffd740'; ctx.arc(this.x,this.y,this.radius+11,-Math.PI/2,-Math.PI/2+Math.PI*2*pct); ctx.stroke(); }
+        draw(ctx){ const team=CONFIG.team[this.side]; ctx.beginPath(); ctx.arc(this.x,this.y,this.radius+8,0,Math.PI*2); ctx.fillStyle=this.isCapital?'rgba(255,215,64,0.12)':'rgba(255,255,255,0.06)'; ctx.fill(); ctx.beginPath(); ctx.arc(this.x,this.y,this.radius,0,Math.PI*2); ctx.fillStyle=team.color; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=team.outline; ctx.stroke(); if(this.isCapital){ drawStar(ctx,this.x,this.y,5,this.radius*0.8,this.radius*0.4,'#ffd740'); } else { ctx.beginPath(); ctx.arc(this.x,this.y,3,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); } const pct=(this.control+CONFIG.cityCaptureThreshold)/(2*CONFIG.cityCaptureThreshold); ctx.beginPath(); ctx.lineWidth=3; ctx.strokeStyle='#ffd740'; ctx.arc(this.x,this.y,this.radius+11,-Math.PI/2,-Math.PI/2+Math.PI*2*pct); ctx.stroke(); }
       }
       function drawStar(ctx,x,y,spikes,outerRadius,innerRadius,color){ let rot=Math.PI/2*3; let step=Math.PI/spikes; ctx.beginPath(); ctx.moveTo(x,y-outerRadius); for(let i=0;i<spikes;i++){ let cx=x+Math.cos(rot)*outerRadius, cy=y+Math.sin(rot)*outerRadius; ctx.lineTo(cx,cy); rot+=step; cx=x+Math.cos(rot)*innerRadius; cy=y+Math.sin(rot)*innerRadius; ctx.lineTo(cx,cy); rot+=step; } ctx.lineTo(x,y-outerRadius); ctx.closePath(); ctx.fillStyle=color; ctx.fill(); }
 
       // Spatial hashing
       let spatial;
       function rebuildSpatial(){ const cols=Math.ceil(canvas.width/40), rows=Math.ceil(canvas.height/40); const cells=new Array(cols*rows); for(let i=0;i<cells.length;i++) cells[i]=[]; const index=(x,y)=>{const c=clamp(Math.floor(x/40),0,cols-1); const r=clamp(Math.floor(y/40),0,rows-1); return r*cols+c;}; for(const u of state.units) cells[index(u.x,u.y)].push(u); spatial={cols,rows,cells,index}; }
-      function getUnitsInRadius(x,y,radius){ const results=[]; if(!spatial) return results; const minC=clamp(Math.floor((x-radius)/40),0,spatial.cols-1); const maxC=clamp(Math.floor((x+radius)/40),0,spatial.cols-1); const minR=clamp(Math.floor((y-radius)/40),0,spatial.rows-1); const maxR=clamp(Math.floor((y+radius)/40),0,spatial.rows-1); for(let r=minR;r<=maxR;r++) for(let c=minC;c<=maxC;c++){ const arr=spatial.cells[r*spatial.cols+c]; for(const u of arr){ if(Math.hypot(u.x-x,u.y-y)<=radius) results.push(u); } } return results; }
+      function getUnitsInRadius(x,y,radius){
+        const results=[]; if(!spatial) return results;
+        const minC=clamp(Math.floor((x-radius)/40),0,spatial.cols-1);
+        const maxC=clamp(Math.floor((x+radius)/40),0,spatial.cols-1);
+        const minR=clamp(Math.floor((y-radius)/40),0,spatial.rows-1);
+        const maxR=clamp(Math.floor((y+radius)/40),0,spatial.rows-1);
+        const r2 = radius*radius;
+        for(let r=minR;r<=maxR;r++) for(let c=minC;c<=maxC;c++){
+          const arr=spatial.cells[r*spatial.cols+c];
+          for(const u of arr){ const dx=u.x-x, dy=u.y-y; if(dx*dx+dy*dy<=r2) results.push(u); }
+        }
+        return results;
+      }
 
       // Check if a unit's planned path corridor is free of enemy units
       function isPathCorridorClear(unit, startIndex){
@@ -591,14 +756,45 @@
         for(const side of ['blue','red']){ placeCity(side,true); for(let i=0;i<4;i++) placeCity(side,false); }
         // Place harbors
         function isCoastForSide(c,r,side){ const t=tileAt(map,c,r); if(!t) return false; if(t.owner!==side) return false; if(['ocean','lake','water','river'].includes(t.terrain)) return false; const dirs=[[1,0],[-1,0],[0,1],[0,-1]]; for(const [dc,dr] of dirs){ const tt=tileAt(map,c+dc,r+dr); if(tt && ['ocean','lake','water','river'].includes(tt.terrain)) return true; } return false; }
-        function placeHarbors(side){ let placed=0; let attempts=0; while(placed<3 && attempts<12000){ attempts++; const c = rng.int(2, map.cols-3); const r=rng.int(3,map.rows-4); if(!isCoastForSide(c,r,side)) continue; const {x,y}=cellCenter(c,r); if(cities.some(ci=>dist(ci.x,ci.y,x,y)<130)) continue; const harbor=new City(x,y,side,false); harbor.isHarbor=true; cities.push(harbor); placed++; } }
-        for(const side of ['blue','red']) placeHarbors(side);
+        // Harbors removed: no special naval spawns; coast cities are regular cities
         const units=[]; const lastPlanAt={red:0, blue:0}; const st={ rng, map, cities, units, lastPlanAt, startedAt: nowSec(), paused:false, winner:null, allowCombat:false, countdownActive:true, difficulty: 'normal' };
         // Initial frontline troops on both sides
         spawnFrontlineUnits(st);
         return st; }
 
+      function createGameFromScenario(scen){
+        const rng = new RNG(Math.floor(Math.random()*1e9));
+        const cols = Math.max(10, Math.floor(scen.cols || CONFIG.mapCols));
+        const rows = Math.max(10, Math.floor(scen.rows || CONFIG.mapRows));
+        const tiles = new Array(cols*rows);
+        for(let r=0;r<rows;r++){
+          for(let c=0;c<cols;c++){
+            const i=r*cols+c;
+            const sTile = Array.isArray(scen.tiles) ? scen.tiles[i] : null;
+            const terrain = (sTile && CONFIG.terrain[sTile.terrain]) ? sTile.terrain : 'plains';
+            const owner = (sTile && (sTile.owner==='blue' || sTile.owner==='red')) ? sTile.owner : (c<cols/2? 'blue':'red');
+            const control = (sTile && typeof sTile.control === 'number') ? sTile.control : (owner==='blue'? CONFIG.tileControlThreshold : -CONFIG.tileControlThreshold);
+            tiles[i] = { terrain, owner, control };
+          }
+        }
+        const map = { cols, rows, tiles };
+        if(scen.frontline){ map.frontline = scen.frontline; }
+        const cities=[];
+        if(Array.isArray(scen.cities)){
+          for(const ci of scen.cities){ if(!ci) continue; const x = clamp(ci.x||0, 0, canvas.width); const y = clamp(ci.y||0, 0, canvas.height); const side = (ci.side==='red')?'red':'blue'; const isCapital = !!ci.isCapital; cities.push(new City(x,y,side,isCapital)); }
+        }
+        const units=[];
+        if(Array.isArray(scen.units)){
+          for(const u of scen.units){ if(!u) continue; const x = clamp(u.x||0, 0, canvas.width); const y = clamp(u.y||0, 0, canvas.height); const side = (u.side==='red')?'red':'blue'; const isTank = !!u.isTank; units.push(new Unit(x,y,side,isTank)); }
+        }
+        const lastPlanAt={red:0, blue:0};
+        const st={ rng, map, cities, units, lastPlanAt, startedAt: nowSec(), paused:false, winner:null, allowCombat:false, countdownActive:true, difficulty: 'normal', scenario: scen };
+        CONFIG.mapCols = cols; CONFIG.mapRows = rows; resizeCanvasToWindow();
+        return st;
+      }
+
       function terrainPassable(t){ return CONFIG.terrain[t.terrain].move !== Infinity; }
+      function terrainSpawnableForLand(t){ return CONFIG.terrain[t.terrain].move !== Infinity && t.terrain !== 'river'; }
       function spawnFrontlineUnits(st){
         const {map}=st; const cols=map.cols, rows=map.rows; const fl = map.tiles.frontline || map.frontline || {};
         const theta = fl.theta ?? Math.random()*Math.PI*2; const nx=Math.cos(theta), ny=Math.sin(theta); const tx=-ny, ty=nx;
@@ -611,7 +807,7 @@
           return { x: cx, y: cy };
         }
         function isBlue(c,r){ const dx=(c+0.5)-center.x, dy=(r+0.5)-center.y; const tt=dx*tx+dy*ty; const s=dx*nx+dy*ny - amp*Math.sin(k*tt+phi); return s<0; }
-        function findNearestPassableCell(cx, cy, side){ const maxRad=6; for(let rad=0; rad<=maxRad; rad++){ for(let dr=-rad; dr<=rad; dr++){ for(let dc=-rad; dc<=rad; dc++){ if(Math.abs(dc)!==rad && Math.abs(dr)!==rad) continue; const c=clamp(Math.round(cx)+dc,1,cols-2), r=clamp(Math.round(cy)+dr,1,rows-2); const t=tileAt(map,c,r); if(!t) continue; if((side==='blue' && isBlue(c,r)) || (side==='red' && !isBlue(c,r))){ if(terrainPassable(t)) return {c,r}; } } } } return null; }
+        function findNearestPassableCell(cx, cy, side){ const maxRad=6; for(let rad=0; rad<=maxRad; rad++){ for(let dr=-rad; dr<=rad; dr++){ for(let dc=-rad; dc<=rad; dc++){ if(Math.abs(dc)!==rad && Math.abs(dr)!==rad) continue; const c=clamp(Math.round(cx)+dc,1,cols-2), r=clamp(Math.round(cy)+dr,1,rows-2); const t=tileAt(map,c,r); if(!t) continue; if((side==='blue' && isBlue(c,r)) || (side==='red' && !isBlue(c,r))){ if(terrainSpawnableForLand(t)) return {c,r}; } } } } return null; }
         const offsetCells = Math.max(3, Math.ceil((CONFIG.engageRadius+12)/TILE_W));
         const stepCells = Math.max(2, CONFIG.frontline.rowStep);
         const maxLen = Math.hypot(cols, rows);
@@ -630,7 +826,7 @@
       }
 
       function spawnUnitNearCity(city){
-        // Land-only spawn: avoid water/ocean/lake tiles
+        // Land-only spawn: avoid water/ocean/lake/river tiles (still crossable, but no spawns on rivers)
         for(let tries=0; tries<50; tries++){
           const angle=Math.random()*Math.PI*2; const radius=city.radius+10+Math.random()*12; const x=city.x+Math.cos(angle)*radius; const y=city.y+Math.sin(angle)*radius;
           const cell=worldToCell(x,y); const t=tileAt(state.map, cell.c, cell.r);
@@ -639,113 +835,80 @@
         }
       }
 
-      class NavalUnit extends Unit{
-        constructor(x,y,side,type){ super(x,y,side,false); const a=CONFIG.navalUnits[type]; this.radius=a.radius; this.baseSpeed=a.baseSpeed; this.baseSpeedOriginal=this.baseSpeed; this.maxHp=a.hp; this.maxHpOriginal=this.maxHp; this.hp=this.maxHp; this.dps=a.dps; this.type=type; this.isNaval=true; this.cargo = type==='transporter' ? (CONFIG.navalUnits.transporter.cargo||5) : 0; }
-        setTarget(x,y,map){ this.target={x,y}; const s=worldToCell(this.x,this.y); const e=worldToCell(x,y); const path=findPath(map,s.c,s.r,e.c,e.r,true); this.path=path; this.pathIndex=0; }
-        update(dt,map){
-          // Movement on naval tiles only
-          this.engaged=this.lockedForCombat;
-          if(this.path && this.pathIndex < this.path.length){
-            const node=this.path[this.pathIndex]; const {x:tx,y:ty}=cellCenter(node.c,node.r);
-            const dx=tx-this.x, dy=ty-this.y; const d=Math.hypot(dx,dy);
-            const tile=tileAt(map,node.c,node.r); const slow=CONFIG.terrain[tile.terrain].navalMove; const speed=slow===Infinity?0:this.baseSpeed/slow; const step=speed*dt;
-            if(d<=step){ this.x=tx; this.y=ty; this.pathIndex++; if(this.pathIndex>=this.path.length){ this.path=null; this.pathIndex=0; } }
-            else { this.x += (dx/d)*step; this.y += (dy/d)*step; }
-          }
-          // Transporter landing
-          if(this.type==='transporter' && this.cargo>0){
-            const cell=worldToCell(this.x,this.y); const t=tileAt(map,cell.c,cell.r);
-            if(t && ['ocean','lake','water','river'].includes(t.terrain)){
-              // Check adjacent land tile
-              const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
-              for(const [dc,dr] of dirs){ const c=cell.c+dc, r=cell.r+dr; const tt=tileAt(map,c,r); if(!tt) continue; if(CONFIG.terrain[tt.terrain].move!==Infinity){
-                // Drop cargo on land
-                for(let i=0;i<this.cargo;i++){ const jitter=()=> (Math.random()-0.5)*8; const p=cellCenter(c,r); state.units.push(new Unit(p.x+jitter(), p.y+jitter(), this.side, Math.random()<0.1)); }
-                this.hp=0; break;
-              } }
-            }
-          }
-        }
-        draw(ctx){
-          const team=CONFIG.team[this.side]; ctx.save(); const engagedShake=this.engaged?(Math.random()-0.5)*1.0:0; ctx.translate(engagedShake,engagedShake);
-          ctx.beginPath(); ctx.arc(this.x,this.y,this.radius,0,Math.PI*2); ctx.fillStyle=team.color; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=team.outline; ctx.stroke();
-          if(this.type==='battleship'){
-            ctx.beginPath(); const w=this.radius*1.6, h=this.radius*0.9; ctx.ellipse(this.x,this.y,w/2,h/2,0,0,Math.PI*2); ctx.strokeStyle='#0af'; ctx.lineWidth=1.4; ctx.stroke();
-          } else if(this.type==='transporter'){
-            ctx.beginPath(); const s=this.radius*1.2; ctx.moveTo(this.x, this.y - s/2); ctx.lineTo(this.x - s/2, this.y + s/2); ctx.lineTo(this.x + s/2, this.y + s/2); ctx.closePath(); ctx.strokeStyle='#0af'; ctx.lineWidth=1.4; ctx.stroke();
-          }
-          if(this.selected){ ctx.beginPath(); ctx.arc(this.x,this.y,this.radius+3,0,Math.PI*2); ctx.strokeStyle='rgba(255,255,255,0.9)'; ctx.lineWidth=1.2; ctx.stroke(); }
-          ctx.restore();
-        }
-      }
-
-      function spawnNavalUnitNearHarbor(harbor){
-        // Alternate cycles for battleship vs transporter per requested rates
-        harbor._navalCycle = (harbor._navalCycle||0) + 1;
-        const produceTransporter = (harbor._navalCycle % 3 === 0); // 1 per 3 cycles
-        const produceBattleship = (harbor._navalCycle % 5 === 0);  // 1 per 5 cycles
-        const dirs=[[1,0],[-1,0],[0,1],[0,-1]]; const cell=worldToCell(harbor.x, harbor.y);
-        function trySpawn(type){
-          for(const [dc,dr] of dirs){ const c=cell.c+dc, r=cell.r+dr; const t=tileAt(state.map,c,r); if(!t) continue; if(CONFIG.terrain[t.terrain].navalMove!==Infinity){ const p=cellCenter(c,r); state.units.push(new NavalUnit(p.x, p.y, harbor.side, type)); return true; } }
-          return false;
-        }
-        if(produceBattleship) { if(trySpawn('battleship')) return; }
-        if(produceTransporter) { if(trySpawn('transporter')) return; }
-        // fallback try spawning at least one naval unit if neither condition hit this cycle
-        trySpawn(Math.random()<0.5?'battleship':'transporter');
-      }
+      // Naval units removed
 
       // Input
-      let mouse={x:0,y:0}; let drag=null; canvas.addEventListener('mousemove',e=>{ const rect=canvas.getBoundingClientRect(); mouse.x=e.clientX-rect.left; mouse.y=e.clientY-rect.top; if(drag){ drag.x1=mouse.x; drag.y1=mouse.y; } });
-      canvas.addEventListener('mousedown',e=>{ if(state.winner) return; if(e.button===0){ drag={x0:mouse.x,y0:mouse.y,x1:mouse.x,y1:mouse.y}; }});
-      canvas.addEventListener('mouseup',e=>{ if(state.winner) return; if(state.spectate) return; if(e.button===0){ const box=drag; drag=null; if(!box) return; const moved=Math.hypot(box.x1-box.x0,box.y1-box.y0)>4; if(moved){ const minX=Math.min(box.x0,box.x1), maxX=Math.max(box.x0,box.x1); const minY=Math.min(box.y0,box.y1), maxY=Math.max(box.y0,box.y1); for(const u of state.units) u.selected=false; for(const u of state.units){ if(u.side!=='blue') continue; if(u.x>=minX && u.x<=maxX && u.y>=minY && u.y<=maxY) u.selected=true; } } else { let picked=null, best=12; for(const u of state.units){ if(u.side!=='blue') continue; const d=Math.hypot(u.x-mouse.x,u.y-mouse.y); if(d<best){ best=d; picked=u; } } if(picked){ for(const u of state.units) u.selected=false; picked.selected=true; } } }});
+      let mouse={x:0,y:0}; let drag=null;
+      canvas.addEventListener('mousemove',e=>{ const rect=canvas.getBoundingClientRect(); mouse.x=e.clientX-rect.left; mouse.y=e.clientY-rect.top; if(editor && editor.mode){ if(editor.dragging){ editorPaintAtMouse(); } return; } if(state && state.spectate) return; if(drag){ drag.x1=mouse.x; drag.y1=mouse.y; } });
+      canvas.addEventListener('mousedown',e=>{ if(state.winner) return; if(editor && editor.mode){ if(e.button===0){ editorMouseDown('left'); } if(e.button===2){ editorMouseDown('right'); e.preventDefault(); } return; } if(state && state.spectate) return; if(e.button===0){ drag={x0:mouse.x,y0:mouse.y,x1:mouse.x,y1:mouse.y}; }});
+      canvas.addEventListener('mouseup',e=>{ if(state.winner) return; if(editor && editor.mode){ editor.dragging=false; return; } if(state && state.spectate){ drag=null; return; } if(e.button===0){ const box=drag; drag=null; if(!box) return; const moved=Math.hypot(box.x1-box.x0,box.y1-box.y0)>4; if(moved){ const minX=Math.min(box.x0,box.x1), maxX=Math.max(box.x0,box.x1); const minY=Math.min(box.y0,box.y1), maxY=Math.max(box.y0,box.y1); for(const u of state.units) u.selected=false; for(const u of state.units){ if(u.side!=='blue') continue; if(u.x>=minX && u.x<=maxX && u.y>=minY && u.y<=maxY) u.selected=true; } } else { let picked=null, best=12; for(const u of state.units){ if(u.side!=='blue') continue; const d=Math.hypot(u.x-mouse.x,u.y-mouse.y); if(d<best){ best=d; picked=u; } } if(picked){ for(const u of state.units) u.selected=false; picked.selected=true; } } }});
       // Right-click drag formation line (offensive line) instead of path following
       let rdrag=null; // {points:[{x,y}], active:boolean}
       let suppressContextMenuOnce=false;
       canvas.addEventListener('contextmenu',e=>{
-        e.preventDefault(); if(state.winner) return false;
+        e.preventDefault(); if(state.winner) return false; if(editor && editor.mode) return false;
         if(state.spectate) return false; // disable player orders in spectate
         if(suppressContextMenuOnce){ suppressContextMenuOnce=false; return false; }
         const selected=state.units.filter(u=>u.selected && u.side==='blue');
         // If not dragging a line (or line too short), treat as single-click ring formation
         const isDraggingLine = rdrag && rdrag.active && rdrag.points && rdrag.points.length>1;
-        if(selected.length && !isDraggingLine){
+          if(selected.length && !isDraggingLine){
           const center={x:mouse.x,y:mouse.y}; const ring=Math.max(18, Math.sqrt(selected.length)*10);
           for(let i=0;i<selected.length;i++){
             const angle=(i/selected.length)*Math.PI*2; const x=center.x+Math.cos(angle)*ring; const y=center.y+Math.sin(angle)*ring;
-            selected[i].setTarget(x,y,state.map); selected[i].lockedForCombat=false;
+            PATHFINDING_CONTEXT.prefersDirect = true; selected[i].setTarget(x,y,state.map); selected[i].lockedForCombat=false;
           }
         }
         return false;
       });
-      canvas.addEventListener('mousedown', e=>{ if(state.spectate) return; if(e.button===2){ rdrag={points:[{x:mouse.x,y:mouse.y}], active:true}; } });
-      canvas.addEventListener('mousemove', e=>{ if(rdrag && rdrag.active){ const last=rdrag.points[rdrag.points.length-1]; const dx=mouse.x-last.x, dy=mouse.y-last.y; if(Math.hypot(dx,dy)>10){ rdrag.points.push({x:mouse.x,y:mouse.y}); } } });
+      canvas.addEventListener('mousedown', e=>{ if(editor && editor.mode) return; if(state.spectate) return; if(e.button===2){ rdrag={points:[{x:mouse.x,y:mouse.y}], active:true}; } });
+      canvas.addEventListener('mousemove', e=>{ if(editor && editor.mode) return; if(rdrag && rdrag.active){ const last=rdrag.points[rdrag.points.length-1]; const dx=mouse.x-last.x, dy=mouse.y-last.y; if(Math.hypot(dx,dy)>10){ rdrag.points.push({x:mouse.x,y:mouse.y}); } } });
       window.addEventListener('mouseup', e=>{
-        if(rdrag && e.button===2){ if(state.spectate){ rdrag=null; return; }
+        if(editor && editor.mode) return; if(rdrag && e.button===2){ if(state.spectate){ rdrag=null; return; }
           const selected=state.units.filter(u=>u.selected && u.side==='blue');
           if(selected.length && rdrag.points.length>1){
             const pts=rdrag.points.slice();
             // Polyline total length
             let total=0; for(let i=1;i<pts.length;i++) total+=Math.hypot(pts[i].x-pts[i-1].x, pts[i].y-pts[i-1].y);
-            // Sample exactly N points along polyline at equal arc lengths
-            const N=selected.length; const targets=[];
-            function pointAtDist(d){
-              let acc=0; for(let i=1;i<pts.length;i++){
-                const ax=pts[i-1].x, ay=pts[i-1].y, bx=pts[i].x, by=pts[i].y; const segLen=Math.hypot(bx-ax,by-ay);
-                if(acc+segLen >= d){ const t=(d-acc)/segLen; return {x:ax+(bx-ax)*t, y:ay+(by-ay)*t}; }
-                acc+=segLen;
-              }
-              return pts[pts.length-1];
-            }
-            for(let k=1;k<=N;k++){
-              const d = (k/(N+1))*total; targets.push(pointAtDist(d));
-            }
-            // Assign targets with formation metadata
-            const formationId = Math.floor(Math.random()*1e9);
-            for(let i=0;i<N;i++){
+             // Assign each unit to the closest point on the drawn line (direct mapping, avoids crossing)
+             const N=selected.length; const targets=new Array(N);
+             function closestPointToPolyline(p){
+               let best={x:pts[0].x,y:pts[0].y}, bestD=Infinity;
+               for(let i=1;i<pts.length;i++){
+                 const ax=pts[i-1].x, ay=pts[i-1].y, bx=pts[i].x, by=pts[i].y;
+                 const abx=bx-ax, aby=by-ay; const apx=p.x-ax, apy=p.y-ay; const ab2=abx*abx+aby*aby; const t=ab2? Math.max(0, Math.min(1, (apx*abx+apy*aby)/ab2)) : 0;
+                 const cx=ax+abx*t, cy=ay+aby*t; const dd=(cx-p.x)*(cx-p.x)+(cy-p.y)*(cy-p.y);
+                 if(dd<bestD){ bestD=dd; best.x=cx; best.y=cy; }
+               }
+               return best;
+             }
+             // Cover the whole line: sample M evenly spaced points along the polyline and assign nearest unit to each
+             function pointAtDist(d){ let acc=0; for(let i=1;i<pts.length;i++){ const ax=pts[i-1].x, ay=pts[i-1].y, bx=pts[i].x, by=pts[i].y; const segLen=Math.hypot(bx-ax,by-ay); if(acc+segLen>=d){ const t=(d-acc)/segLen; return {x:ax+(bx-ax)*t, y:ay+(by-ay)*t}; } acc+=segLen; } return pts[pts.length-1]; }
+             const M = Math.max(N, Math.ceil(total/60)); // ensure dense coverage for long lines (about every 60px)
+             const lineSamples = [];
+             for(let k=0;k<M;k++){ const d = (k/(M-1))*total; lineSamples.push(pointAtDist(d)); }
+             // Assign each sample to the nearest unit (Hungarian could be used; greedy approx here)
+             const available = new Set(selected.map((_,i)=>i));
+             const assignments = [];
+             for(let si=0; si<lineSamples.length && available.size>0; si++){
+               const s = lineSamples[si]; let bestU=-1, bestD=Infinity;
+               for(const ui of available){ const u=selected[ui]; const dd=(u.x-s.x)*(u.x-s.x)+(u.y-s.y)*(u.y-s.y); if(dd<bestD){ bestD=dd; bestU=ui; } }
+               if(bestU!==-1){ assignments.push({ui:bestU, target:s}); available.delete(bestU); }
+             }
+             // If more units than samples, duplicate neighbors to fill remaining
+             const remainingUnits = Array.from(available);
+             for(const ui of remainingUnits){
+               let bestS=-1, bestD=Infinity; for(let si=0; si<lineSamples.length; si++){ const s=lineSamples[si]; const dd=(selected[ui].x-s.x)*(selected[ui].x-s.x)+(selected[ui].y-s.y)*(selected[ui].y-s.y); if(dd<bestD){ bestD=dd; bestS=si; } }
+               assignments.push({ui, target: lineSamples[bestS]});
+             }
+             // Build final targets array in unit order
+             for(let i=0;i<N;i++){ const a = assignments.find(x=>x.ui===i); targets[i] = a ? a.target : closestPointToPolyline({x:selected[i].x,y:selected[i].y}); }
+             // Assign targets with formation metadata
+             const formationId = Math.floor(Math.random()*1e9);
+             for(let i=0;i<N;i++){
               const u=selected[i]; const tgt=targets[i];
-              u.formation = { id: formationId, points: pts, slotIndex: i, totalLength: total, count: N };
-              u.setTarget(tgt.x, tgt.y, state.map); u.lockedForCombat=false;
+               u.formation = { id: formationId, points: pts, slotIndex: i, totalLength: total, count: N, persistent: false };
+               PATHFINDING_CONTEXT.prefersDirect = true; u.setTarget(tgt.x, tgt.y, state.map); u.lockedForCombat=false;
             }
             // prevent contextmenu ring override after draw commit
             suppressContextMenuOnce=true; setTimeout(()=>{ suppressContextMenuOnce=false; }, 100);
@@ -753,28 +916,69 @@
           rdrag=null;
         }
       });
-      window.addEventListener('keydown',e=>{ if(e.code==='KeyA'){ for(const u of state.units) u.selected=(u.side==='blue'); } else if(e.code==='Space'){ state.paused=!state.paused; } else if(e.code==='KeyR'){ restart(); } });
+      window.addEventListener('keydown',e=>{ if(e.code==='KeyE'){ setEditorMode(!(editor && editor.mode)); updateUIVisibility(); }
+        if(editor && editor.mode){ if(e.code==='Space'){ state.paused=!state.paused; updateUIVisibility(); } return; }
+        if(e.code==='KeyA'){ for(const u of state.units) u.selected=(u.side==='blue'); } else if(e.code==='Space'){ state.paused=!state.paused; updateUIVisibility(); } else if(e.code==='KeyR'){ restart(); } });
 
       restartBtn.addEventListener('click',()=>restart()); playAgain.addEventListener('click',()=>restart());
-      function restart(){ overlay.classList.remove('show'); resizeCanvasToWindow(); state=createGame(); // show start
-        startOverlay.classList.remove('hidden'); countdownEl.textContent=''; }
+      function restart(){ overlay.classList.remove('show'); setEditorMode(false); resizeCanvasToWindow(); state = (state && state.scenario) ? createGameFromScenario(state.scenario) : createGame(); // show start
+        startOverlay.classList.remove('hidden'); countdownEl.textContent=''; updateUIVisibility(); }
 
       // Start flow with countdown and combat lock
       // Spectate options show/hide
       (function(){ const chk=document.getElementById('spectateChk'); const opt=document.getElementById('spectateOptions'); if(chk&&opt){ chk.addEventListener('change',()=>{ opt.style.display = chk.checked? 'block':'none'; }); } })();
 
       startBtn.addEventListener('click', ()=>{
-        if(!state) return; let remaining=5; countdownEl.textContent=String(remaining);
+        if(!state) return; setEditorMode(false); let remaining=5; countdownEl.textContent=String(remaining);
         state.difficulty = getSelectedDifficulty();
         state.aggression = getSelectedAggression();
         state.countdownActive=true; state.allowCombat=false; startBtn.disabled=true;
+        state.speedPreset = getSelectedSpeed();
         state.spectate = getSpectate();
         if(state.spectate){ state.difficultyBlue = getSelectedDifficultyBlue(); state.aggressionBlue = getSelectedAggressionBlue(); } else { state.difficultyBlue = state.difficulty; state.aggressionBlue = state.aggression; }
         const id=setInterval(()=>{
           remaining--; if(remaining>0){ countdownEl.textContent=String(remaining); }
-          else { clearInterval(id); countdownEl.textContent='Go!'; setTimeout(()=>{ startOverlay.classList.add('hidden'); state.countdownActive=false; state.allowCombat=true; countdownEl.textContent=''; startBtn.disabled=false; }, 400); }
+          else { clearInterval(id); countdownEl.textContent='Go!'; setTimeout(()=>{ setEditorMode(false); startOverlay.classList.add('hidden'); state.countdownActive=false; state.allowCombat=true; countdownEl.textContent=''; startBtn.disabled=false; updateUIVisibility(); }, 400); }
         }, 1000);
       });
+
+      if(openEditorBtn){ openEditorBtn.addEventListener('click',()=>{ setEditorMode(true); startOverlay.classList.add('hidden'); updateUIVisibility(); }); }
+
+      // Editor implementation
+      function setEditorMode(on){ editor.mode=!!on; if(editorControls) editorControls.style.display = editor.mode? 'block':'none'; if(editorToggle) editorToggle.textContent = editor.mode? 'Editor: ON':'Editor'; if(editor.mode){ state.paused=true; state.allowCombat=false; } if(state){ state.terrainCanvas=null; state.ownerTintCanvas=null; state._borderSegments=null; } updateUIVisibility(); }
+      function populateTerrainSelect(){ if(!terrainSelect) return; terrainSelect.innerHTML=''; for(const k of Object.keys(CONFIG.terrain)){ const opt=document.createElement('option'); opt.value=k; opt.textContent=k; if(k===editor.terrain) opt.selected=true; terrainSelect.appendChild(opt); } }
+      function showToolPanels(){ const tool=editor.tool; const tt=document.getElementById('toolTerrain'); const to=document.getElementById('toolOwner'); const tc=document.getElementById('toolCity'); const tu=document.getElementById('toolUnit'); if(tt) tt.style.display = (tool==='terrain')? 'block':'none'; if(to) to.style.display = (tool==='owner')? 'block':'none'; if(tc) tc.style.display = (tool==='city')? 'block':'none'; if(tu) tu.style.display = (tool==='unit')? 'block':'none'; }
+      function editorPaintAtMouse(){ const cell=worldToCell(mouse.x, mouse.y); const b = editor.tool==='owner'? (editor.ownerBrush|0) : (editor.brush|0); const map=state.map; for(let dr=-b; dr<=b; dr++){ for(let dc=-b; dc<=b; dc++){ const c=cell.c+dc, r=cell.r+dr; if(c<0||r<0||c>=map.cols||r>=map.rows) continue; const idx=r*map.cols+c; const t=map.tiles[idx]; if(editor.tool==='terrain'){ t.terrain = editor.terrain; }
+            else if(editor.tool==='owner'){ t.owner = editor.owner; t.control = (editor.owner==='blue'? 1:-1)*CONFIG.tileControlThreshold; }
+            else if(editor.tool==='eraser'){ t.terrain = 'plains'; }
+          } }
+        state.terrainCanvas=null; state.ownerTintCanvas=null; state._borderSegments=null; }
+      function editorPlaceOrRemove(type, button){ if(type==='city'){ if(button==='left'){ const side=editor.city.side; const isCap=editor.city.capital; const tooCloseCity=state.cities.some(ci=>Math.hypot(ci.x-mouse.x, ci.y-mouse.y)<40); if(!tooCloseCity){ state.cities.push(new City(mouse.x, mouse.y, side, isCap)); } } else if(button==='right'){ let best=-1, bestD=99999; for(let i=0;i<state.cities.length;i++){ const ci=state.cities[i]; const d=Math.hypot(ci.x-mouse.x, ci.y-mouse.y); if(d<bestD){ bestD=d; best=i; } } if(best!==-1 && bestD<40){ state.cities.splice(best,1); } } }
+        if(type==='unit'){ if(button==='left'){ const side=editor.unit.side; const tank=editor.unit.tank; state.units.push(new Unit(mouse.x, mouse.y, side, tank)); } else if(button==='right'){ let best=-1, bestD=99999; for(let i=0;i<state.units.length;i++){ const u=state.units[i]; const d=Math.hypot(u.x-mouse.x, u.y-mouse.y); if(d<bestD){ bestD=d; best=i; } } if(best!==-1 && bestD<30){ state.units.splice(best,1); } } }
+      }
+      function editorMouseDown(which){ const tool=editor.tool; if(tool==='terrain' || tool==='owner' || tool==='eraser'){ editor.dragging=true; editorPaintAtMouse(); return; } if(tool==='city'){ editorPlaceOrRemove('city', which); return; } if(tool==='unit'){ editorPlaceOrRemove('unit', which); return; } }
+      function scenarioFromState(){ const map=state.map; const tiles = map.tiles.map(t=>({ terrain:t.terrain, owner:t.owner, control:t.control })); const scen={ version:1, cols:map.cols, rows:map.rows, tiles, cities: state.cities.map(c=>({ x:c.x, y:c.y, side:c.side, isCapital: !!c.isCapital })), units: state.units.map(u=>({ x:u.x, y:u.y, side:u.side, isTank: !!u.isTank })), frontline: map.frontline }; return scen; }
+      function downloadScenario(){ const scen=scenarioFromState(); const blob=new Blob([JSON.stringify(scen)], {type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='scenario.json'; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 0); }
+      function applyScenarioObject(obj){ try{ state=createGameFromScenario(obj); editor.scenario=obj; updateUIVisibility(); } catch(err){ console.error('Failed to load scenario', err); alert('Failed to load scenario file.'); } }
+      function openScenarioFileDialog(){ if(editorFileInput){ editorFileInput.value=''; editorFileInput.click(); } }
+      if(editorFileInput){ editorFileInput.addEventListener('change', ()=>{ const f=editorFileInput.files&&editorFileInput.files[0]; if(!f) return; const rd=new FileReader(); rd.onload = ()=>{ try{ const obj=JSON.parse(rd.result); applyScenarioObject(obj); } catch(e){ alert('Invalid scenario file.'); } }; rd.readAsText(f); }); }
+      function generateNoiseMapInPlace(){ const rng=new RNG(Math.floor(Math.random()*1e9)); if(state && state.map){ CONFIG.mapCols = state.map.cols; CONFIG.mapRows = state.map.rows; } const newMap=generateMap(rng); state.map = newMap; state.cities=[]; state.units=[]; state.terrainCanvas=null; state.ownerTintCanvas=null; state._borderSegments=null; }
+      function clearMap(){ const map=state.map; for(let r=0;r<map.rows;r++){ for(let c=0;c<map.cols;c++){ const t=tileAt(map,c,r); t.terrain='plains'; t.owner = (c<map.cols/2)? 'blue':'red'; t.control= (t.owner==='blue'?1:-1)*CONFIG.tileControlThreshold; } } state.cities=[]; state.units=[]; state.terrainCanvas=null; state.ownerTintCanvas=null; state._borderSegments=null; }
+      function initEditorUI(){ populateTerrainSelect(); if(terrainSelect){ terrainSelect.addEventListener('change', ()=>{ editor.terrain = terrainSelect.value; }); }
+        if(brushSizeInput){ brushSizeInput.addEventListener('input', ()=>{ editor.brush = parseInt(brushSizeInput.value)||2; }); }
+        if(ownerBrushInput){ ownerBrushInput.addEventListener('input', ()=>{ editor.ownerBrush = parseInt(ownerBrushInput.value)||2; }); }
+        const toolRadios=document.querySelectorAll('input[name="tool"]'); toolRadios.forEach(r=> r.addEventListener('change', ()=>{ if(r.checked){ editor.tool=r.value; showToolPanels(); } }));
+        const ownerRadios=document.querySelectorAll('input[name="ownerSide"]'); ownerRadios.forEach(r=> r.addEventListener('change', ()=>{ if(r.checked){ editor.owner=r.value; } }));
+        const cityRadios=document.querySelectorAll('input[name="citySide"]'); cityRadios.forEach(r=> r.addEventListener('change', ()=>{ if(r.checked){ editor.city.side=r.value; } })); if(cityIsCapitalChk){ cityIsCapitalChk.addEventListener('change', ()=>{ editor.city.capital=!!cityIsCapitalChk.checked; }); }
+        const unitRadios=document.querySelectorAll('input[name="unitSide"]'); unitRadios.forEach(r=> r.addEventListener('change', ()=>{ if(r.checked){ editor.unit.side=r.value; } })); if(unitIsTankChk){ unitIsTankChk.addEventListener('change', ()=>{ editor.unit.tank=!!unitIsTankChk.checked; }); }
+        if(editorToggle){ editorToggle.addEventListener('click', ()=>{ setEditorMode(!(editor && editor.mode)); }); }
+        if(editorSaveBtn){ editorSaveBtn.addEventListener('click', ()=> downloadScenario()); }
+        if(editorLoadBtn){ editorLoadBtn.addEventListener('click', ()=> openScenarioFileDialog()); }
+      if(editorPlayBtn){ editorPlayBtn.addEventListener('click', ()=>{ setEditorMode(false); startOverlay.classList.remove('hidden'); updateUIVisibility(); }); }
+        if(editorGenNoiseBtn){ editorGenNoiseBtn.addEventListener('click', ()=> generateNoiseMapInPlace()); }
+        if(editorClearBtn){ editorClearBtn.addEventListener('click', ()=> clearMap()); }
+        showToolPanels();
+      }
 
       // AI
       function aiUpdate(){
@@ -787,57 +991,75 @@
         const t=nowSec(); if(t - (state.lastPlanAt[side]||0) < CONFIG.ai.planEverySeconds) return; state.lastPlanAt[side]=t;
         const sideUnits=state.units.filter(u=>u.side===side); if(!sideUnits.length) return;
         const diff = CONFIG.difficultyPresets[difficulty||'normal'] || CONFIG.difficultyPresets.normal;
-        const agg = CONFIG.aggressionPresets[aggression||'balanced'] || CONFIG.aggressionPresets.balanced;
+        const aggName = aggression || 'balanced';
+        const agg = CONFIG.aggressionPresets[aggName] || CONFIG.aggressionPresets.balanced;
         const ownCities=state.cities.filter(c=>c.side===side);
         const enemySide = (side==='red') ? 'blue' : 'red';
-        const enemyCities=state.cities.filter(c=>c.side===enemySide); if(!enemyCities.length) return;
+        const enemyCities=state.cities.filter(c=>c.side===enemySide);
 
-        // Assess threats near own cities
-        const threatened = ownCities.filter(c=> getUnitsInRadius(c.x, c.y, CONFIG.ai.defenseRadius*agg.defendWeight).some(u=>u.side===enemySide));
-
-        // Pool of idle units
-        const idle = sideUnits.filter(u=>!u.path || u.pathIndex>=u.path.length || Math.random()<0.15);
         // Apply AI speed/HP multipliers (idempotent)
+        const appliedKey = side + ':' + (difficulty||state.difficulty||'normal');
         for(const u of sideUnits){
-          if(u._diffApplied!==state.difficulty && (side==='red' || state.spectate)){
+          if(u._diffApplied!==appliedKey && (side==='red' || state.spectate)){
             u.baseSpeed = (u.baseSpeedOriginal||u.baseSpeed) * diff.aiSpeedMult;
+            u.baseSpeedBaseline = u.baseSpeed;
             u.maxHp = (u.maxHpOriginal||u.maxHp) * diff.aiHpMult;
-            if(u.hp>u.maxHp) u.hp=u.maxHp; u._diffApplied=state.difficulty;
+            if(u.hp>u.maxHp) u.hp=u.maxHp; u._diffApplied=appliedKey;
           }
         }
 
-        if(threatened.length){
-          for(const city of threatened){
-            const needed = Math.max(1, Math.round(CONFIG.ai.garrisonSize * (diff.aiPlanFactor)));
-            const defenders = idle.splice(0, needed);
-            for(const u of defenders){ const jitter=()=> (Math.random()-0.5)*40; u.setTarget(city.x+jitter(), city.y+jitter(), state.map); }
+        // Strict 1:1 coverage first, extras handling, and last-stand behavior
+        const enemyUnits = state.units.filter(u=>u.side===enemySide);
+        const ourUnits = sideUnits;
+        if(ourUnits.length===0) return;
+        // If no enemy units remain, push to enemy cities to finish
+        if(enemyUnits.length===0){
+          if(enemyCities.length){
+            const caps = enemyCities.filter(c=>c.isCapital);
+            for(const u of ourUnits){ const tgt=(caps[0]||enemyCities[0]); if(tgt) { const j=()=> (Math.random()-0.5)*20; u.setTarget(tgt.x+j(), tgt.y+j(), state.map); } }
           }
+          return;
         }
-
-        // Determine attack target and stick to frontlines: push toward nearest enemy-controlled border cells
-        const ownCapital = ownCities.find(c=>c.isCapital);
-        const ownCapUnderAttack = ownCapital && getUnitsInRadius(ownCapital.x, ownCapital.y, CONFIG.ai.defenseRadius*1.2).some(u=>u.side===enemySide);
-        let attackTarget;
-        if(ownCapUnderAttack){ attackTarget = ownCapital; }
-        else {
-          const enemyCaps = enemyCities.filter(c=>c.isCapital);
-          if(enemyCaps.length && Math.random()<Math.min(1, agg.capFocus*0.6)) attackTarget = enemyCaps[0];
-          else {
-            // frontline-seeking: choose nearest enemy border segment to unit centroid
-            const cx = sideUnits.reduce((a,u)=>a+u.x,0)/sideUnits.length, cy=sideUnits.reduce((a,u)=>a+u.y,0)/sideUnits.length;
-            // sample a grid of potential frontline points (owner boundaries)
-            let bestPt={x:cx,y:cy}, bestD=Infinity;
-            for(let r=2;r<state.map.rows-2;r+=6){ for(let c=2;c<state.map.cols-2;c+=6){ const a=tileAt(state.map,c,r), b=tileAt(state.map,c+1,r); const d=tileAt(state.map,c,r+1); if(a&&b&&a.owner!==b.owner){ const p={x:(c+1)*TILE_W,y:r*TILE_H}; const dd=dist(p.x,p.y,cx,cy); if(dd<bestD) { bestD=dd; bestPt=p; } } if(a&&d&&a.owner!==d.owner){ const p={x:c*TILE_W,y:(r+1)*TILE_H}; const dd=dist(p.x,p.y,cx,cy); if(dd<bestD) { bestD=dd; bestPt=p; } } } }
-            attackTarget = { x: bestPt.x, y: bestPt.y };
+        // Order throttling to avoid stutter and oscillation
+        const ORDER_COOLDOWN = 1.4; // seconds
+        const MIN_RETARGET_DIST = 26; // px
+        function canOrderUnit(u){ const now=nowSec(); if(u.lockedForCombat) return false; if(u._lastOrderAt && (now - u._lastOrderAt) < ORDER_COOLDOWN) return false; return true; }
+        function issueOrder(u, tx, ty, force){ const now=nowSec(); if(!force){ if(u.lockedForCombat) return false; if(u._lastOrderAt && (now - u._lastOrderAt) < ORDER_COOLDOWN) return false; if(u.target){ const dx=u.target.x-tx, dy=u.target.y-ty; if(dx*dx+dy*dy < MIN_RETARGET_DIST*MIN_RETARGET_DIST) return false; } } const j=()=> (Math.random()-0.5)*20; u.setTarget(tx+j(), ty+j(), state.map); u._lastOrderAt = now; return true; }
+        function aggroMode(name){ switch(name){ case 'veryaggressive': case 'aggressive': return 'attack'; case 'slightlyaggressive': return 'lean_attack'; case 'slightlydefensive': return 'lean_defend'; case 'defensive': case 'verydefensive': return 'defend'; default: return 'balanced'; } }
+        const mode = aggroMode(aggName);
+        // Outnumbered: either last-stand (attack/defend) or maintain best-effort 1:1 coverage
+        if(ourUnits.length < enemyUnits.length){
+          if(mode==='attack'){
+            if(enemyCities.length){ const caps=enemyCities.filter(c=>c.isCapital); for(const u of ourUnits){ const tgt=(caps[0]||enemyCities[0]); issueOrder(u, tgt.x, tgt.y, true); } }
+            return;
           }
+          if(mode==='defend'){
+            if(ownCities.length){ const caps=ownCities.filter(c=>c.isCapital); for(const u of ourUnits){ const tgt=(caps[0]||ownCities[0]); issueOrder(u, tgt.x, tgt.y, true); } }
+            return;
+          }
+          // else fall through to coverage-only
         }
-        const groupSize = Math.max(3, Math.round(CONFIG.ai.attackGroupSize * agg.groupSizeMult * (1/diff.aiPlanFactor)));
-        for(let i=0; i<idle.length; i+=groupSize){
-          const group = idle.slice(i, i+groupSize);
-          if(group.length===0) break;
-          const spread = 120;
-          const offset = (idx)=>{ const ang = (idx/group.length)*Math.PI*2; return { dx: Math.cos(ang)*spread, dy: Math.sin(ang)*spread }; };
-          for(let gi=0; gi<group.length; gi++){ const u=group[gi]; const o=offset(gi); const tx=attackTarget.x+o.dx, ty=attackTarget.y+o.dy; u.setTarget(tx, ty, state.map); }
+        // Coverage: for each enemy, ensure at least one of ours is on them
+        function enemyCovered(e){ const near=getUnitsInRadius(e.x,e.y,CONFIG.engageRadius+10); return near.some(n=>n.side===side); }
+        const available=new Set(ourUnits.map((_,i)=>i));
+        function popClosestAvailableTo(x,y){ let best=-1, bestScore=Infinity; for(const i of available){ const u=ourUnits[i]; if(!canOrderUnit(u)) continue; const dx=u.x-x, dy=u.y-y; const d=dx*dx+dy*dy; if(d<bestScore){ bestScore=d; best=i; } } if(best!==-1){ available.delete(best); return best; } for(const i of available){ const u=ourUnits[i]; if(!u.lockedForCombat){ available.delete(i); return i; } } const it=available.values().next(); if(!it.done){ available.delete(it.value); return it.value; } return -1; }
+        for(const e of enemyUnits){ if(enemyCovered(e)) continue; const idx=popClosestAvailableTo(e.x,e.y); if(idx!==-1){ const u=ourUnits[idx]; issueOrder(u, e.x, e.y, false); } }
+        // Extras: assign remaining to cities/defense/double-team depending on aggression
+        const extras = Array.from(available).map(i=>ourUnits[i]);
+        if(extras.length){
+          let alloc={cities:0,defend:0,double:0};
+          if(mode==='attack'){ alloc.cities=extras.length; }
+          else if(mode==='lean_attack'){ alloc.cities=Math.round(extras.length*0.5); alloc.double=extras.length-alloc.cities; }
+          else if(mode==='balanced'){ alloc.cities=Math.floor(extras.length/3); alloc.defend=Math.floor(extras.length/3); alloc.double=extras.length-alloc.cities-alloc.defend; }
+          else if(mode==='lean_defend'){ alloc.defend=Math.round(extras.length*0.5); alloc.double=Math.round(extras.length*0.3); alloc.cities=extras.length-alloc.defend-alloc.double; }
+          else if(mode==='defend'){ alloc.defend=extras.length; }
+          let cursor=0;
+          // Attack enemy cities
+          for(let k=0;k<alloc.cities && cursor<extras.length;k++,cursor++){ const u=extras[cursor]; if(enemyCities.length){ const caps=enemyCities.filter(c=>c.isCapital); const tgt=(caps[0]||enemyCities[0]); issueOrder(u, tgt.x, tgt.y, false); } }
+          // Defend own cities
+          for(let k=0;k<alloc.defend && cursor<extras.length;k++,cursor++){ const u=extras[cursor]; if(ownCities.length){ const caps=ownCities.filter(c=>c.isCapital); const tgt=(caps[0]||ownCities[0]); issueOrder(u, tgt.x, tgt.y, false); } }
+          // Double-team nearest enemies
+          for(let k=0;k<alloc.double && cursor<extras.length;k++,cursor++){ const u=extras[cursor]; let best=null, bestD=Infinity; for(const e of enemyUnits){ const dx=e.x-u.x, dy=e.y-u.y; const d=dx*dx+dy*dy; if(d<bestD){ bestD=d; best=e; } } if(best){ issueOrder(u, best.x, best.y, false); } }
         }
       }
 
@@ -871,16 +1093,29 @@
             const typeMod = (u.isTank?0.8:1);
             // Terrain damage taken modifier
             const cell=worldToCell(u.x,u.y); const tt=tileAt(state.map,cell.c,cell.r); const terrMod = tt ? (CONFIG.terrain[tt.terrain].damageTakenMultiplier || 1) : 1;
-            // Distance from nearest friendly city reduces outgoing damage (logistic falloff)
-            function nearestFriendlyCityMultiplier(unit){
+            // Distance from nearest friendly city reduces incoming damage (logistic falloff)
+            function nearestFriendlyCityIncomingDamageMultiplier(unit){
               let best=Infinity; for(const ci of state.cities){ if(ci.side!==unit.side) continue; const d=Math.hypot(ci.x-unit.x, ci.y-unit.y); if(d<best) best=d; }
               const fall=CONFIG.cityDamageFalloffPx; const min=CONFIG.cityDamageMinMultiplier; if(!isFinite(best)) return min; const t=best/fall; const k=1/(1+Math.exp(4*(t-1))); // sigmoid centered at falloff distance
-              return clamp(min + (1-min)*k, min, 1);
+              // Near city (k≈1) => multiplier≈min (less incoming damage). Far (k≈0) => multiplier≈1.
+              return clamp(min + (1-min)*(1-k), min, 1);
             }
-            const cityMult = nearestFriendlyCityMultiplier(u);
+            const cityMult = nearestFriendlyCityIncomingDamageMultiplier(u);
             const aiMult = (u.side==='red') ? diff.aiDamageMult : 1;
             const totalDps=enemies.reduce((s,e)=>s+e.dps,0) * typeMod * outnumberedMultiplier * flankMultiplier * terrMod * cityMult * aiMult;
             u.hp -= totalDps*dt*0.15;
+            // Dynamic frontline push/pull: winners push forward, losers fall back proportionally to advantage
+            const advantage = (friendlyCount - enemyCount) / Math.max(friendlyCount, enemyCount);
+            if(Math.abs(advantage) > 0.05){
+              const dirX = (u.target? u.target.x : u.x) - u.x;
+              const dirY = (u.target? u.target.y : u.y) - u.y;
+              const len = Math.hypot(dirX,dirY) || 1;
+              const nx = dirX/len, ny = dirY/len;
+              const push = CONFIG.combatPush.maxPxPerSec * dt * Math.max(0, advantage);
+              const pull = CONFIG.combatPush.maxPxPerSec * dt * Math.max(0, -advantage);
+              if(advantage>0){ u.x += nx*push; u.y += ny*push; }
+              else { u.x -= nx*pull; u.y -= ny*pull; }
+            }
           }
           // Physical collision with minimum navigable gap rule; softer friendly collision
           let hasFriendlyOverlap=false;
@@ -894,9 +1129,9 @@
              u.lockedForCombat = true; v.lockedForCombat = true;
             }
           }
-          // restore/reset speed depending on friendly overlap state
-          if(hasFriendlyOverlap){ u.baseSpeed = Math.max(10, (u.baseSpeedOriginal||u.baseSpeed)*0.65); }
-          else { u.baseSpeed = (u.baseSpeedOriginal||u.baseSpeed); }
+          // restore/reset speed depending on friendly overlap state (preserve difficulty-adjusted baseline)
+          if(hasFriendlyOverlap){ u.baseSpeed = Math.max(10, (u.baseSpeedBaseline||u.baseSpeed)*0.65); }
+          else { u.baseSpeed = (u.baseSpeedBaseline||u.baseSpeed); }
           // Edge handling: gently steer units back inside instead of hard clamping
           const margin = Math.max(u.radius+2, 6);
           const steer = 0.5;
@@ -909,41 +1144,83 @@
         state.units = state.units.filter(u=>u.hp>0);
       }
 
-      function drawMap(map){ for(let r=0;r<map.rows;r++){ for(let c=0;c<map.cols;c++){ const t=tileAt(map,c,r); ctx.fillStyle=CONFIG.terrain[t.terrain].color; ctx.fillRect(c*TILE_W,r*TILE_H,TILE_W,TILE_H); const tint=t.owner==='blue'?'rgba(60,150,255,0.10)':'rgba(255,100,100,0.10)'; ctx.fillStyle=tint; ctx.fillRect(c*TILE_W,r*TILE_H,TILE_W,TILE_H); } }
-        drawSmoothBorders(map); }
+      function ensureTerrainCanvas(){
+        if(!state) return;
+        const w = canvas.width, h = canvas.height;
+        if(state.terrainCanvas && state.terrainCanvas.width===w && state.terrainCanvas.height===h) return;
+        const off = document.createElement('canvas'); off.width=w; off.height=h; const octx = off.getContext('2d');
+        const map = state.map;
+        for(let r=0;r<map.rows;r++){
+          for(let c=0;c<map.cols;c++){
+            const t=tileAt(map,c,r); octx.fillStyle=CONFIG.terrain[t.terrain].color; octx.fillRect(c*TILE_W,r*TILE_H,TILE_W,TILE_H);
+          }
+        }
+        state.terrainCanvas = off;
+      }
+      function ensureOwnerTintCanvas(){
+        if(!state) return;
+        const w = canvas.width, h = canvas.height;
+        const now = nowSec();
+        const needNew = !state.ownerTintCanvas || state.ownerTintCanvas.width!==w || state.ownerTintCanvas.height!==h || !state._ownerTintCacheAtSec || (now - state._ownerTintCacheAtSec) > 0.1;
+        if(!needNew) return;
+        const off = state.ownerTintCanvas || document.createElement('canvas'); off.width=w; off.height=h; const octx = off.getContext('2d');
+        octx.clearRect(0,0,w,h);
+        const map = state.map;
+        for(let r=0;r<map.rows;r++){
+          for(let c=0;c<map.cols;c++){
+            const t=tileAt(map,c,r);
+            octx.fillStyle = t.owner==='blue' ? 'rgba(60,150,255,0.10)' : 'rgba(255,100,100,0.10)';
+            octx.fillRect(c*TILE_W,r*TILE_H,TILE_W,TILE_H);
+          }
+        }
+        state.ownerTintCanvas = off;
+        state._ownerTintCacheAtSec = now;
+      }
+      function drawMap(map){
+        ensureTerrainCanvas();
+        if(state && state.terrainCanvas) ctx.drawImage(state.terrainCanvas, 0, 0);
+        ensureOwnerTintCanvas();
+        if(state && state.ownerTintCanvas) ctx.drawImage(state.ownerTintCanvas, 0, 0);
+        drawSmoothBorders(map);
+      }
 
       // Marching squares based smooth border drawing
       function drawSmoothBorders(map){
         const cols=map.cols, rows=map.rows;
-        function val(c,r){ const t=tileAt(map,c,r); if(!t) return 0; return t.control || (t.owner==='blue'?1:-1); }
-        function lerp(a,b){ if(a===b) return 0.5; const t = (0 - a)/(b - a); return isFinite(t)? t : 0.5; }
-        const segments=[];
-        for(let r=0;r<rows-1;r++){
-          for(let c=0;c<cols-1;c++){
-            const v00=val(c,r), v10=val(c+1,r), v11=val(c+1,r+1), v01=val(c,r+1);
-            const signDiff=(a,b)=> (a>0)!==(b>0);
-            const points=[]; // in order: top,right,bottom,left
-            if(signDiff(v00,v10)){
-              const t=lerp(v00,v10); const x=(c+0.5 + t)*TILE_W, y=(r+0.5)*TILE_H; points.push({x,y,edge:'top'});
-            }
-            if(signDiff(v10,v11)){
-              const t=lerp(v10,v11); const x=(c+1+0.5)*TILE_W, y=(r+0.5 + t)*TILE_H; points.push({x,y,edge:'right'});
-            }
-            if(signDiff(v11,v01)){
-              const t=lerp(v11,v01); const x=(c+0.5 + t)*TILE_W, y=(r+1+0.5)*TILE_H; points.push({x,y,edge:'bottom'});
-            }
-            if(signDiff(v01,v00)){
-              const t=lerp(v01,v00); const x=(c+0.5)*TILE_W, y=(r+0.5 + t)*TILE_H; points.push({x,y,edge:'left'});
-            }
-            if(points.length===2){ segments.push([points[0], points[1]]); }
-            else if(points.length===4){
-              const center=(v00+v10+v11+v01)/4;
-              if(center>0){ segments.push([points[0], points[3]]); segments.push([points[1], points[2]]); }
-              else { segments.push([points[0], points[1]]); segments.push([points[2], points[3]]); }
+        const now = nowSec();
+        let segments = state && state._borderSegments;
+        if(!segments || !state._borderCacheAtSec || (now - state._borderCacheAtSec) > 0.1){
+          function val(c,r){ const t=tileAt(map,c,r); if(!t) return 0; return t.control || (t.owner==='blue'?1:-1); }
+          function lerp(a,b){ if(a===b) return 0.5; const t = (0 - a)/(b - a); return isFinite(t)? t : 0.5; }
+          segments=[];
+          for(let r=0;r<rows-1;r++){
+            for(let c=0;c<cols-1;c++){
+              const v00=val(c,r), v10=val(c+1,r), v11=val(c+1,r+1), v01=val(c,r+1);
+              const signDiff=(a,b)=> (a>0)!==(b>0);
+              const points=[]; // in order: top,right,bottom,left
+              if(signDiff(v00,v10)){
+                const t=lerp(v00,v10); const x=(c+0.5 + t)*TILE_W, y=(r+0.5)*TILE_H; points.push({x,y,edge:'top'});
+              }
+              if(signDiff(v10,v11)){
+                const t=lerp(v10,v11); const x=(c+1+0.5)*TILE_W, y=(r+0.5 + t)*TILE_H; points.push({x,y,edge:'right'});
+              }
+              if(signDiff(v11,v01)){
+                const t=lerp(v11,v01); const x=(c+0.5 + t)*TILE_W, y=(r+1+0.5)*TILE_H; points.push({x,y,edge:'bottom'});
+              }
+              if(signDiff(v01,v00)){
+                const t=lerp(v01,v00); const x=(c+0.5)*TILE_W, y=(r+0.5 + t)*TILE_H; points.push({x,y,edge:'left'});
+              }
+              if(points.length===2){ segments.push([points[0], points[1]]); }
+              else if(points.length===4){
+                const center=(v00+v10+v11+v01)/4;
+                if(center>0){ segments.push([points[0], points[3]]); segments.push([points[1], points[2]]); }
+                else { segments.push([points[0], points[1]]); segments.push([points[2], points[3]]); }
+              }
             }
           }
+          if(state){ state._borderSegments = segments; state._borderCacheAtSec = now; }
         }
-        if(!segments.length) return;
+        if(!segments || !segments.length) return;
         ctx.save();
         ctx.strokeStyle=CONFIG.borders.color;
         ctx.lineWidth=CONFIG.borders.width;
@@ -989,7 +1266,8 @@
       }
 
       let lastTime=performance.now();
-      function update(){ const now=performance.now(); let dt=(now-lastTime)/1000; lastTime=now; dt=Math.min(dt,0.05); if(!state.paused && !state.winner){
+      function currentTimeScale(){ const key=(state && state.speedPreset) || 'default'; const preset=CONFIG.speedPresets[key] ?? CONFIG.defaultTimeScale; return preset; }
+      function update(){ const now=performance.now(); let dt=(now-lastTime)/1000; lastTime=now; dt=Math.min(dt,0.05); dt*=currentTimeScale(); if(!state.paused && !state.winner){
           if(state.allowCombat){
             // Resolve combat/collisions first so units stop before moving
             resolveCombatAndCollisions(dt);
@@ -1008,14 +1286,14 @@
           // New win/lose logic with grace period and majority city rule
           if(!state.originalCityCount){
             state.originalCityCount = {
-              blue: state.cities.filter(c=>c.side==='blue' && !c.isHarbor).length,
-              red: state.cities.filter(c=>c.side==='red' && !c.isHarbor).length,
+              blue: state.cities.filter(c=>c.side==='blue').length,
+              red: state.cities.filter(c=>c.side==='red').length,
             };
           }
           if(!state.grace){ state.grace = { blue: null, red: null }; }
           function checkSide(side){
             const capAlive = state.cities.some(c=>c.isCapital && c.side===side);
-            const currentOwned = state.cities.filter(c=>!c.isHarbor && c.side===side).length;
+            const currentOwned = state.cities.filter(c=>c.side===side).length;
             const orig = state.originalCityCount[side]||1;
             const need = Math.ceil(orig*0.5);
             if(capAlive) { state.grace[side]=null; return null; }
@@ -1062,11 +1340,16 @@
           ctx.save(); ctx.strokeStyle='rgba(255,255,255,0.5)'; ctx.lineWidth=2; ctx.setLineDash([6,6]); ctx.beginPath(); ctx.moveTo(rdrag.points[0].x, rdrag.points[0].y); for(let i=1;i<rdrag.points.length;i++){ ctx.lineTo(rdrag.points[i].x, rdrag.points[i].y); } ctx.stroke(); ctx.restore();
         }
         for(const u of state.units) u.draw(ctx); if(drag){ const x=Math.min(drag.x0,drag.x1), y=Math.min(drag.y0,drag.y1); const w=Math.abs(drag.x1-drag.x0), h=Math.abs(drag.y1-drag.y0); ctx.fillStyle='rgba(255,255,255,0.08)'; ctx.fillRect(x,y,w,h); ctx.strokeStyle=CONFIG.selectionColor; ctx.lineWidth=1.2; ctx.strokeRect(x,y,w,h); }
-        const bu=state.units.filter(u=>u.side==='blue').length; const ru=state.units.filter(u=>u.side==='red').length; const time=Math.floor(nowSec()-state.startedAt); hudText.textContent=`Time ${time}s | Blue units ${bu} | Red units ${ru}`; if(state.winner){ overlay.classList.add('show'); const msg=state.winner==='blue'?'Victory':'Defeat'; resultTitle.textContent=msg; resultSubtitle.textContent=state.winner==='blue'?'You captured the enemy capital.':'Your capital was captured.'; } }
+        // Editor overlay
+        if(editor && editor.mode){ ctx.save(); ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=1; const b=(editor.tool==='owner'? editor.ownerBrush: editor.brush)||2; const cell=worldToCell(mouse.x, mouse.y); const x=(cell.c+0.5)*TILE_W, y=(cell.r+0.5)*TILE_H; const rad=Math.max(TILE_W, TILE_H)*b; ctx.beginPath(); ctx.arc(x,y,rad,0,Math.PI*2); ctx.stroke(); ctx.restore(); }
+        const bu=state.units.filter(u=>u.side==='blue').length; const ru=state.units.filter(u=>u.side==='red').length; const time=Math.floor(nowSec()-state.startedAt); hudText.textContent=`Time ${time}s | Blue units ${bu} | Red units ${ru}`; if(state.winner){ overlay.classList.add('show'); const msg=state.winner==='blue'?'Victory':'Defeat'; resultTitle.textContent=msg; resultSubtitle.textContent=state.winner==='blue'?'You captured the enemy capital.':'Your capital was captured.'; }
+        // Editor HUD hint
+        if(editor && editor.mode){ hudText.textContent += ' | EDITOR MODE'; }
+      }
 
       function loop(){ update(); draw(); requestAnimationFrame(loop); }
 
-      resizeCanvasToWindow(); state=createGame(); // Wait for player to press Start (no spawns before start due to paused state)
+      resizeCanvasToWindow(); state=createGame(); initEditorUI(); updateUIVisibility(); // Wait for player to press Start (no spawns before start due to paused state)
       // keep drawing idle scene
       loop();
     </script>
